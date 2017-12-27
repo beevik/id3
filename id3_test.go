@@ -6,25 +6,22 @@ import (
 	"testing"
 )
 
-type testCase struct {
-	bytes []byte
-	tag   Tag
-	err   string
-}
-
-var headers = []testCase{
-	{[]byte{0x48, 0x44, 0x33, 0x03, 0x00, 0x00, 0x7f, 0x7f, 0x7f, 0x7f}, Tag{}, "invalid id3 tag"},
-	{[]byte{}, Tag{}, "invalid id3 tag"},
-	{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x39}, Tag{}, "invalid id3 tag"},
-	{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80}, Tag{}, "invalid sync code"},
-	{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00}, Tag{}, "invalid sync code"},
-	{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x39, 0x5d}, Tag{3, 0, 0, 7389, []frame{}}, ""},
-	{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x7f, 0x33, 0x39, 0x5d}, Tag{3, 0, 0, 0x0fecdcdd, []frame{}}, ""},
-	{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x7f, 0x7f, 0x7f, 0x7f}, Tag{3, 0, 0, 0x0fffffff, []frame{}}, ""},
-}
-
 func TestHeader(t *testing.T) {
-	for i, c := range headers {
+	var cases = []struct {
+		bytes []byte
+		tag   Tag
+		err   string
+	}{
+		{[]byte{}, Tag{}, "invalid id3 tag"},
+		{[]byte{0x48, 0x44, 0x33, 0x03, 0x00, 0x00, 0x7f, 0x7f, 0x7f, 0x7f}, Tag{}, "invalid id3 tag"},
+		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x39}, Tag{}, "invalid id3 tag"},
+		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80}, Tag{}, "invalid sync code"},
+		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00}, Tag{}, "invalid sync code"},
+		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x39, 0x5d}, Tag{3, 0, 0, 7389, []frame{}}, ""},
+		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x7f, 0x33, 0x39, 0x5d}, Tag{3, 0, 0, 0x0fecdcdd, []frame{}}, ""},
+		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x7f, 0x7f, 0x7f, 0x7f}, Tag{3, 0, 0, 0x0fffffff, []frame{}}, ""},
+	}
+	for i, c := range cases {
 		tag := new(Tag)
 		r := bytes.NewReader(c.bytes)
 		_, err := tag.ReadFrom(r)
@@ -57,26 +54,111 @@ func TestHeader(t *testing.T) {
 	}
 }
 
-func TestUnsync(t *testing.T) {
-	for bs := 1; bs < 12; bs++ {
-		b := bytes.NewReader([]byte{0xff, 0x00, 0xff, 0x00})
-		r := newUnsyncReader(b)
+func TestReadSyncUint32(t *testing.T) {
+	var cases = []struct {
+		input  []byte
+		output uint32
+		err    string
+	}{
+		{[]byte{0x00}, 0, "invalid sync code"},
+		{[]byte{0x00, 0x00, 0x00}, 0, "invalid sync code"},
+		{[]byte{0x00, 0x00, 0x00, 0x00}, 0, ""},
+		{[]byte{0x00, 0x00, 0x00, 0x00, 0x00}, 0, ""},
+		{[]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, 0, "invalid sync code"},
+		{[]byte{0x00, 0x00, 0x00, 0x80}, 0, "invalid sync code"},
+		{[]byte{0xff, 0x00, 0x00, 0x00}, 0, "invalid sync code"},
+		{[]byte{0xff, 0x00, 0x00, 0x00, 0x00}, 0, "invalid sync code"},
+		{[]byte{0x01, 0x01, 0x01, 0x01}, 0x00204081, ""},
+		{[]byte{0x01, 0x02, 0x03, 0x04}, 0x00208184, ""},
+		{[]byte{0x00, 0x05, 0x30, 0x00}, 0x00015800, ""},
+		{[]byte{0x01, 0x02, 0x03, 0x04, 0x05}, 0x1040c205, ""},
+		{[]byte{0x7f, 0x7f, 0x7f, 0x7f}, 0x0fffffff, ""},
+		{[]byte{0x00, 0x7f, 0x7f, 0x7f, 0x7f}, 0x0fffffff, ""},
+		{[]byte{0x0f, 0x7f, 0x7f, 0x7f, 0x7f}, 0xffffffff, ""},
+	}
 
-		buf := make([]byte, bs)
-		out := make([]byte, 0)
-		for {
-			n, err := r.Read(buf)
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				t.Error(err)
-			}
-			out = append(out, buf[:n]...)
+	for i, c := range cases {
+		out, err := readSyncUint32(c.input)
+		if err == nil && c.err != "" {
+			t.Errorf("case %v:\n  expected error '%v', got success\n", i, c.err)
+		}
+		if err != nil && err.Error() != c.err {
+			t.Errorf("case %v:\n  got error '%v', expected error '%v'\n", i, err, c.err)
+		}
+		if err != nil && c.err == "" {
+			t.Errorf("case %v\n  got error '%v', expected success\n", i, err)
+		}
+		if err != nil && err.Error() == c.err {
+			continue
 		}
 
-		if len(out) != 2 || out[0] != 0xff || out[1] != 0xff {
-			t.Errorf("invalid unsync result: %v\n", out)
+		if out != c.output {
+			t.Errorf("case %v\n  got %d. expected %d\n", i, out, c.output)
+		}
+	}
+}
+
+func TestUnsync(t *testing.T) {
+	var cases = []struct {
+		synced   []byte
+		unsynced []byte
+	}{
+		{[]byte{0x00}, []byte{0x00}},
+		{[]byte{0xff}, []byte{0xff}},
+		{[]byte{0xff, 0xc0}, []byte{0xff, 0xc0}},
+		{[]byte{0xff, 0xf0}, []byte{0xff, 0x00, 0xf0}},
+		{[]byte{0xff, 0xe0}, []byte{0xff, 0x00, 0xe0}},
+		{[]byte{0xff, 0x00}, []byte{0xff, 0x00, 0x00}},
+		{[]byte{0xff, 0xff}, []byte{0xff, 0x00, 0xff}},
+		{[]byte{0xff, 0xff, 0xff}, []byte{0xff, 0x00, 0xff, 0xff}},
+		{[]byte{0xff, 0xff, 0xff, 0xff}, []byte{0xff, 0x00, 0xff, 0xff, 0x00, 0xff}},
+		{[]byte{0x00, 0x01, 0x02, 0x03}, []byte{0x00, 0x01, 0x02, 0x03}},
+		{[]byte{0xff, 0xfe, 0xff, 0xfe, 0xff, 0xfe}, []byte{0xff, 0x00, 0xfe, 0xff, 0x00, 0xfe, 0xff, 0x00, 0xfe}},
+	}
+
+	// Test synced -> unsynced
+	for i, c := range cases {
+		for chunk := 1; chunk <= len(c.synced); chunk++ {
+			b := bytes.NewBuffer(make([]byte, 0))
+			w := newUnsyncWriter(b)
+			for j := 0; j < len(c.synced); j += chunk {
+				right := j + chunk
+				if right > len(c.synced) {
+					right = len(c.synced)
+				}
+				_, err := w.Write(c.synced[j:right])
+				if err != nil {
+					t.Error(err)
+				}
+			}
+			if bytes.Compare(b.Bytes(), c.unsynced) != 0 {
+				t.Errorf("case %d:\n  unsync write failed (chunk=%d). got: %v\n", i, chunk, b.Bytes())
+			}
+		}
+	}
+
+	// Test unsynced -> synced
+	for i, c := range cases {
+		for chunk := 1; chunk <= len(c.unsynced)*2; chunk++ {
+			b := bytes.NewReader(c.unsynced)
+			r := newUnsyncReader(b)
+
+			buf := make([]byte, chunk)
+			out := make([]byte, 0)
+			for {
+				n, err := r.Read(buf)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Error(err)
+				}
+				out = append(out, buf[:n]...)
+			}
+
+			if bytes.Compare(out, c.synced) != 0 {
+				t.Errorf("case %d:\n  unsync read failed (chunk=%d). got %v\n", i, chunk, out)
+			}
 		}
 	}
 }

@@ -1,7 +1,6 @@
 package id3
 
 import (
-	"bufio"
 	"errors"
 	"io"
 )
@@ -40,11 +39,12 @@ const (
 
 // ReadFrom reads from a stream into a tag.
 func (t *Tag) ReadFrom(r io.Reader) (n int64, err error) {
-	b := bufio.NewReader(r)
-
-	var hdr []byte
-	hdr, err = b.Peek(10)
-	if err != nil {
+	// Attempt to read the 10-byte ID3 header.
+	hdr := make([]byte, 10)
+	var hn int
+	hn, err = r.Read(hdr)
+	n += int64(hn)
+	if hn < 10 || err != nil {
 		return 0, ErrInvalidTag
 	}
 
@@ -65,10 +65,9 @@ func (t *Tag) ReadFrom(r io.Reader) (n int64, err error) {
 	// Process the header flags.
 	t.headerFlags = hdr[5]
 
-	// If the "unsync" flag is set, then use an unsync reader to remove
+	// If the "unsync" flag is set, then use an unsync reader to remove any
 	// sync codes.
-	unsync := (t.headerFlags & headerFlagUnsync) != 0
-	if unsync {
+	if (t.headerFlags & headerFlagUnsync) != 0 {
 		r = newUnsyncReader(r)
 	}
 
@@ -95,32 +94,6 @@ func (t *Tag) ReadFrom(r io.Reader) (n int64, err error) {
 	}
 
 	return n, nil
-}
-
-func (t *Tag) readVersion23(r io.Reader) (n int64, err error) {
-	if (t.headerFlags & 0x1f) != 0 {
-		return n, ErrInvalidHeaderFlags
-	}
-
-	if (t.headerFlags & headerFlagExtended) != 0 {
-		hdr := make([]byte, 10)
-		var hn int
-		hn, err = r.Read(hdr)
-		n += int64(hn)
-		if err != nil {
-			return n, err
-		}
-	}
-
-	return n, nil
-}
-
-func (t *Tag) readVersion24(r io.Reader) (n int64, err error) {
-	if (t.headerFlags & 0x0f) != 0 {
-		return n, ErrInvalidHeaderFlags
-	}
-
-	return 0, nil
 }
 
 func readSyncUint32(b []byte) (value uint32, err error) {
