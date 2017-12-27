@@ -17,9 +17,9 @@ func TestHeader(t *testing.T) {
 		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x39}, Tag{}, "invalid id3 tag"},
 		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80}, Tag{}, "invalid sync code"},
 		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00}, Tag{}, "invalid sync code"},
-		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x39, 0x5d}, Tag{3, 0, 0, 7389, []frame{}}, ""},
-		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x7f, 0x33, 0x39, 0x5d}, Tag{3, 0, 0, 0x0fecdcdd, []frame{}}, ""},
-		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x7f, 0x7f, 0x7f, 0x7f}, Tag{3, 0, 0, 0x0fffffff, []frame{}}, ""},
+		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x39, 0x5d}, Tag{3, 0, 7389, []Frame{}}, ""},
+		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x7f, 0x33, 0x39, 0x5d}, Tag{3, 0, 0x0fecdcdd, []Frame{}}, ""},
+		{[]byte{0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x7f, 0x7f, 0x7f, 0x7f}, Tag{3, 0, 0x0fffffff, []Frame{}}, ""},
 	}
 	for i, c := range cases {
 		tag := new(Tag)
@@ -39,17 +39,17 @@ func TestHeader(t *testing.T) {
 			continue
 		}
 
-		if tag.version != c.tag.version {
+		if tag.Version != c.tag.Version {
 			t.Errorf("header case %v:\n  invalid header version: got %x, expected: %x\n",
-				i, tag.version, c.tag.version)
+				i, tag.Version, c.tag.Version)
 		}
-		if tag.headerFlags != c.tag.headerFlags {
+		if tag.Flags != c.tag.Flags {
 			t.Errorf("header case %v:\n  invalid header flags: got %v expected %v\n",
-				i, tag.headerFlags, c.tag.headerFlags)
+				i, tag.Flags, c.tag.Flags)
 		}
-		if tag.size != c.tag.size {
+		if tag.Size != c.tag.Size {
 			t.Errorf("header case %v:\n  invalid header size: got %v, expected %v\n",
-				i, tag.size, c.tag.size)
+				i, tag.Size, c.tag.Size)
 		}
 	}
 }
@@ -78,7 +78,7 @@ func TestReadSyncUint32(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		out, err := readSyncUint32(c.input)
+		out, err := readSyncSafeUint32(c.input)
 		if err == nil && c.err != "" {
 			t.Errorf("case %v:\n  expected error '%v', got success\n", i, c.err)
 		}

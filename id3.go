@@ -23,18 +23,18 @@ var (
 
 // A Tag represents an entire ID3 tag, including zero or more frames.
 type Tag struct {
-	version       uint8 // 3 or 4 (for 2.3 or 2.4)
-	headerFlags   uint8
-	headerFlagsEx uint16
-	size          uint32
-	frames        []frame
+	Version uint8 // 3 or 4 (for 2.3 or 2.4)
+	Flags   uint8
+	Size    uint32
+	Frames  []Frame
 }
 
+// Possible flags associated with an ID3 tag.
 const (
-	headerFlagUnsync       uint8 = 0x80
-	headerFlagExtended           = 0x40
-	headerFlagExperimental       = 0x20
-	headerFlagFooter             = 0x10 // v2.4 only
+	TagFlagUnsync       uint8 = 1 << 7
+	TagFlagExtended           = 1 << 6
+	TagFlagExperimental       = 1 << 5
+	TagFlagFooter             = 1 << 4
 )
 
 // ReadFrom reads from a stream into a tag.
@@ -53,9 +53,9 @@ func (t *Tag) ReadFrom(r io.Reader) (n int64, err error) {
 		return 0, ErrInvalidTag
 	}
 
-	// Process the version number (2.3 or 2.4).
-	t.version = hdr[3]
-	if t.version != 3 && t.version != 4 {
+	// Process the version number (2.2, 2.3, or 2.4).
+	t.Version = hdr[3]
+	if t.Version < 2 || t.Version > 4 {
 		return 0, ErrInvalidVersion
 	}
 	if hdr[4] != 0 {
@@ -63,25 +63,28 @@ func (t *Tag) ReadFrom(r io.Reader) (n int64, err error) {
 	}
 
 	// Process the header flags.
-	t.headerFlags = hdr[5]
+	t.Flags = hdr[5]
 
 	// If the "unsync" flag is set, then use an unsync reader to remove any
 	// sync codes.
-	if (t.headerFlags & headerFlagUnsync) != 0 {
+	if (t.Flags & TagFlagUnsync) != 0 {
 		r = newUnsyncReader(r)
 	}
 
 	// Process the tag size.
-	t.size, err = readSyncUint32(hdr[6:10])
+	t.Size, err = readSyncSafeUint32(hdr[6:10])
 	if err != nil {
 		return n, err
 	}
 
 	// Instantiate a version-appropriate codec to process the data.
 	var codec codec
-	if t.version == 3 {
+	switch t.Version {
+	case 2:
+		codec = new(codec22)
+	case 3:
 		codec = new(codec23)
-	} else {
+	case 4:
 		codec = new(codec24)
 	}
 
@@ -96,7 +99,7 @@ func (t *Tag) ReadFrom(r io.Reader) (n int64, err error) {
 	return n, nil
 }
 
-func readSyncUint32(b []byte) (value uint32, err error) {
+func readSyncSafeUint32(b []byte) (value uint32, err error) {
 	l := len(b)
 	if l < 4 || l > 5 {
 		return 0, ErrBadSync
@@ -110,59 +113,4 @@ func readSyncUint32(b []byte) (value uint32, err error) {
 		tmp = (tmp << 7) | uint64(b[i])
 	}
 	return uint32(tmp), nil
-}
-
-type frameHeader struct {
-	id    [4]byte
-	size  uint32
-	flags uint16
-}
-
-// frameHeader.flags
-const (
-	frameFlagDiscardOnTagAltered  = 1 << 15
-	frameFlagDiscardOnFileAltered = 1 << 14
-	frameFlagReadOnly             = 1 << 13
-	frameFlagCompressed           = 1 << 7
-	frameFlagEncrypted            = 1 << 6
-	frameFlagGroupInfo            = 1 << 5
-)
-
-type pictureType uint8
-
-type frameHeaderAPIC struct {
-	encoding    uint8
-	mimeType    string
-	pictureType pictureType
-	description string
-	data        []byte
-}
-
-const (
-	picTypeOther             pictureType = 0
-	picTypeIcon                          = 1
-	picTypeIconOther                     = 2
-	picTypeCoverFront                    = 3
-	picTypeCoverBack                     = 4
-	picTypeLeaflet                       = 5
-	picTypeMedia                         = 6
-	picTypeArtistLead                    = 7
-	picTypeArtist                        = 8
-	picTypeConductor                     = 9
-	picTypeBand                          = 10
-	picTypeComposer                      = 11
-	picTypeLyricist                      = 12
-	picTypeRecordingLocation             = 13
-	picTypeDuringRecording               = 14
-	picTypeDuringPerformance             = 15
-	picTypeVideoCapture                  = 16
-	picTypeFish                          = 17
-	picTypeIlllustration                 = 18
-	picTypeBandLogotype                  = 19
-	picTypePublisherLogotype             = 20
-)
-
-type frame struct {
-	header frameHeader
-	data   []uint8
 }
