@@ -1,6 +1,7 @@
 package id3
 
 import (
+	"bufio"
 	"errors"
 	"io"
 )
@@ -21,7 +22,8 @@ var (
 	ErrBadSync = errors.New("invalid sync code")
 )
 
-type tag struct {
+// A Tag represents an entire ID3 tag, including zero or more frames.
+type Tag struct {
 	version       uint8 // 3 or 4 (for 2.3 or 2.4)
 	headerFlags   uint8
 	headerFlagsEx uint16
@@ -30,62 +32,64 @@ type tag struct {
 }
 
 const (
-	headerFlagUnsync       uint8 = 1 << 7
-	headerFlagExtended           = 1 << 6
-	headerFlagExperimental       = 1 << 5
-	headerFlagFooter             = 1 << 4 // v2.4 only
+	headerFlagUnsync       uint8 = 0x80
+	headerFlagExtended           = 0x40
+	headerFlagExperimental       = 0x20
+	headerFlagFooter             = 0x10 // v2.4 only
 )
 
-func (t *tag) ReadFrom(r io.Reader) (n int64, err error) {
-	// Read the 10-byte ID3 header.
-	hdr := make([]byte, 10)
-	var hn int
-	hn, err = r.Read(hdr)
-	n += int64(hn)
-	if hn < 10 {
-		return n, ErrInvalidTag
-	}
+// ReadFrom reads from a stream into a tag.
+func (t *Tag) ReadFrom(r io.Reader) (n int64, err error) {
+	b := bufio.NewReader(r)
+
+	var hdr []byte
+	hdr, err = b.Peek(10)
 	if err != nil {
-		return n, err
+		return 0, ErrInvalidTag
 	}
 
 	// Make sure the tag id is ID3.
 	if string(hdr[0:3]) != "ID3" {
-		return n, ErrInvalidTag
+		return 0, ErrInvalidTag
 	}
 
-	// Parse the version number (2.3 or 2.4).
+	// Process the version number (2.3 or 2.4).
 	t.version = hdr[3]
 	if t.version != 3 && t.version != 4 {
-		return n, ErrInvalidVersion
+		return 0, ErrInvalidVersion
 	}
 	if hdr[4] != 0 {
-		return n, ErrInvalidVersion
+		return 0, ErrInvalidVersion
 	}
 
-	// Parse the header flags.
+	// Process the header flags.
 	t.headerFlags = hdr[5]
-	if t.version == 3 && (t.headerFlags&0xe0) != 0 {
-		return n, ErrInvalidHeaderFlags
-	}
-	if t.version == 4 && (t.headerFlags&0xf0) != 0 {
-		return n, ErrInvalidHeaderFlags
+
+	// If the "unsync" flag is set, then use an unsync reader to remove
+	// sync codes.
+	unsync := (t.headerFlags & headerFlagUnsync) != 0
+	if unsync {
+		r = newUnsyncReader(r)
 	}
 
-	// Parse the tag size.
+	// Process the tag size.
 	t.size, err = readSyncUint32(hdr[6:10])
 	if err != nil {
 		return n, err
 	}
 
-	// Process the rest of the tag using format v2.3 or v2.4.
-	var fn int64
+	// Instantiate a version-appropriate codec to process the data.
+	var codec codec
 	if t.version == 3 {
-		fn, err = t.readVersion23(r)
+		codec = new(codec23)
 	} else {
-		fn, err = t.readVersion24(r)
+		codec = new(codec24)
 	}
-	n += fn
+
+	// Decode the data.
+	var cn int64
+	cn, err = codec.Read(t, r)
+	n += cn
 	if err != nil {
 		return n, err
 	}
@@ -93,7 +97,11 @@ func (t *tag) ReadFrom(r io.Reader) (n int64, err error) {
 	return n, nil
 }
 
-func (t *tag) readVersion23(r io.Reader) (n int64, err error) {
+func (t *Tag) readVersion23(r io.Reader) (n int64, err error) {
+	if (t.headerFlags & 0x1f) != 0 {
+		return n, ErrInvalidHeaderFlags
+	}
+
 	if (t.headerFlags & headerFlagExtended) != 0 {
 		hdr := make([]byte, 10)
 		var hn int
@@ -107,22 +115,28 @@ func (t *tag) readVersion23(r io.Reader) (n int64, err error) {
 	return n, nil
 }
 
-func (t *tag) readVersion24(r io.Reader) (n int64, err error) {
+func (t *Tag) readVersion24(r io.Reader) (n int64, err error) {
+	if (t.headerFlags & 0x0f) != 0 {
+		return n, ErrInvalidHeaderFlags
+	}
+
 	return 0, nil
 }
 
 func readSyncUint32(b []byte) (value uint32, err error) {
-	if len(b) != 4 {
+	l := len(b)
+	if l < 4 || l > 5 {
 		return 0, ErrBadSync
 	}
 
-	for i := 0; i < 4; i++ {
-		if b[i] >= 0x80 {
+	var tmp uint64
+	for i := 0; i < l; i++ {
+		if (b[i] & 0x80) != 0 {
 			return 0, ErrBadSync
 		}
-		value = (value * 0x80) + uint32(b[i])
+		tmp = (tmp << 7) | uint64(b[i])
 	}
-	return value, nil
+	return uint32(tmp), nil
 }
 
 type frameHeader struct {
