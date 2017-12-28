@@ -16,8 +16,8 @@ func needsUnsync(ch byte) bool {
 	return ch == 0 || (ch&0xe0) == 0xe0
 }
 
-func newUnsyncWriter(w io.Writer) *unsyncWriter {
-	return &unsyncWriter{w, 0}
+func newUnsyncWriter(b io.Writer) *unsyncWriter {
+	return &unsyncWriter{b, 0}
 }
 
 func (w *unsyncWriter) Write(p []byte) (n int, err error) {
@@ -67,8 +67,8 @@ type unsyncReader struct {
 	prevbyte uint8
 }
 
-func newUnsyncReader(r io.Reader) *unsyncReader {
-	return &unsyncReader{r, 0}
+func newUnsyncReader(b io.Reader) *unsyncReader {
+	return &unsyncReader{b, 0}
 }
 
 func (r *unsyncReader) Read(p []byte) (int, error) {

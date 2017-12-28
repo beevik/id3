@@ -54,7 +54,7 @@ func TestHeader(t *testing.T) {
 	}
 }
 
-func TestReadSyncUint32(t *testing.T) {
+func TestSyncUint32(t *testing.T) {
 	var cases = []struct {
 		input  []byte
 		output uint32
@@ -79,21 +79,33 @@ func TestReadSyncUint32(t *testing.T) {
 
 	for i, c := range cases {
 		out, err := readSyncSafeUint32(c.input)
+
 		if err == nil && c.err != "" {
 			t.Errorf("case %v:\n  expected error '%v', got success\n", i, c.err)
-		}
-		if err != nil && err.Error() != c.err {
+		} else if err != nil && err.Error() != c.err {
 			t.Errorf("case %v:\n  got error '%v', expected error '%v'\n", i, err, c.err)
-		}
-		if err != nil && c.err == "" {
+		} else if err != nil && c.err == "" {
 			t.Errorf("case %v\n  got error '%v', expected success\n", i, err)
-		}
-		if err != nil && err.Error() == c.err {
+		} else if err != nil && err.Error() == c.err {
 			continue
 		}
 
 		if out != c.output {
 			t.Errorf("case %v\n  got %d. expected %d\n", i, out, c.output)
+		}
+	}
+
+	for i, c := range cases {
+		if c.err != "" {
+			continue
+		}
+		buf := make([]byte, len(c.input))
+		err := writeSyncSafeUint32(buf, c.output)
+
+		if err != nil {
+			t.Errorf("case %v\n  got error '%v', expected '%v'\n", i, err, c.input)
+		} else if bytes.Compare(buf, c.input) != 0 {
+			t.Errorf("case %v\n  got '%v', expected '%v'\n", i, buf, c.input)
 		}
 	}
 }

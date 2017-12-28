@@ -1,8 +1,8 @@
 package id3
 
-import "io"
+import "bufio"
 
 type codec interface {
-	Read(t *Tag, r io.Reader) (int64, error)
-	Write(t *Tag, w io.Writer) (int64, error)
+	Read(t *Tag, r *bufio.Reader) (int, error)
+	Write(t *Tag, w *bufio.Writer) (int, error)
 }

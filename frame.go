@@ -1,6 +1,8 @@
 package id3
 
-import "io"
+import (
+	"bufio"
+)
 
 // A Frame is a piece of an ID3 tag that contains information about the
 // MP3 file.
@@ -10,25 +12,17 @@ type Frame interface {
 	ID() string
 
 	// ReadFrom reads the contents of a frame from an IO stream.
-	ReadFrom(r io.Reader) (n int64, err error)
+	ReadFrom(r *bufio.Reader) (n int, err error)
 
 	// WriteTo writes the contents of a frame to an IO stream.
-	WriteTo(w io.Writer) (n int64, err error)
+	WriteTo(w *bufio.Writer) (n int, err error)
 }
 
 // A FrameHeader holds data common to all ID3 frames.
 type FrameHeader struct {
-	TextID string
-	Size   uint8
-	Flags  uint8
-}
-
-func (h *FrameHeader) ReadFrom(r io.Reader) (n int64, err error) {
-	return 0, nil
-}
-
-func (h *FrameHeader) WriteTo(w io.Writer) (n int64, err error) {
-	return 0, nil
+	IDvalue string // 3 or 4 character ID string
+	Size    uint32 // frame size not including header
+	Flags   uint8  // See FrameFlag*
 }
 
 // Possible values of flags stored per frame.
