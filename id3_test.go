@@ -174,3 +174,39 @@ func TestUnsync(t *testing.T) {
 		}
 	}
 }
+
+func TestEncoding(t *testing.T) {
+	var cases = []struct {
+		encoding Encoding
+		encoded  []byte
+		decoded  string
+		err      string
+	}{
+		{EncodingISO88591, []byte{0x56, 0x58, 0xa1, 0xa2, 0xc6}, "VX¡¢Æ", ""},
+		{EncodingUTF8, []byte{0xc2, 0xa9, 0xf0, 0x9d, 0x8c, 0x86, 0xe2, 0x98, 0x83}, "©𝌆☃", ""},
+		{EncodingUTF16, []byte{0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03}, "©𝌆☃", ""},
+		{EncodingUTF16, []byte{0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26}, "", "invalid text string encountered"},
+		{EncodingUTF16BOM, []byte{0xfe, 0xff, 0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03}, "©𝌆☃", ""},
+		{EncodingUTF16BOM, []byte{0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03}, "", "invalid text string encountered"},
+		{EncodingUTF16BOM, []byte{0xfe, 0xff, 0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03, 0x00}, "", "invalid text string encountered"},
+	}
+
+	for i, c := range cases {
+		r := bytes.NewReader(c.encoded)
+		_, s, err := readEncodedString(r, len(c.encoded), c.encoding)
+
+		if err == nil && c.err != "" {
+			t.Errorf("case %v:\n  expected error '%v', got success\n", i, c.err)
+		} else if err != nil && err.Error() != c.err {
+			t.Errorf("case %v:\n  got error '%v', expected error '%v'\n", i, err, c.err)
+		} else if err != nil && c.err == "" {
+			t.Errorf("case %v\n  got error '%v', expected success\n", i, err)
+		} else if err != nil && err.Error() == c.err {
+			continue
+		}
+
+		if s != c.decoded {
+			t.Errorf("case %v\n  got '%s', expected '%s'\n", i, s, c.decoded)
+		}
+	}
+}

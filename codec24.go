@@ -5,6 +5,10 @@ import (
 	"encoding/binary"
 )
 
+//
+// codec24
+//
+
 type codec24 struct {
 }
 
@@ -15,6 +19,10 @@ func (c *codec24) Read(t *Tag, r *bufio.Reader) (int, error) {
 func (c *codec24) Write(t *Tag, w *bufio.Writer) (int, error) {
 	return 0, nil
 }
+
+//
+// v2.4 FrameHeader codec
+//
 
 func (h *FrameHeader) read24(r *bufio.Reader) (int, error) {
 	buf := make([]byte, 10)
@@ -110,45 +118,47 @@ func (h *FrameHeader) write24(w *bufio.Writer) (int, error) {
 	return nn, err
 }
 
-func createFrame24(id string) Frame {
-	if id[0] == 'T' {
-		return newFrameText(id)
-	}
-
-	switch id {
-	case "APIC":
-		return new(FrameAPIC)
-	default:
-		return nil
-	}
-}
-
 //
 // FrameText
 //
 
 type FrameText struct {
 	FrameHeader
-	TextID   string
 	Encoding Encoding
 	Data     string
 }
 
 func newFrameText(id string) *FrameText {
-	return &FrameText{TextID: id}
+	return &FrameText{}
 }
 
 func (f *FrameText) ID() string {
-	return f.TextID
+	return f.FrameHeader.IDvalue
 }
 
 func (f *FrameText) ReadFrom(r *bufio.Reader) (int, error) {
+	nn := 0
+
 	n, err := f.FrameHeader.read24(r)
+	nn += n
 	if err != nil {
-		return n, err
+		return nn, err
 	}
 
-	return 0, nil
+	enc, err := r.ReadByte()
+	nn++
+	if err != nil {
+		return nn, err
+	}
+	f.Encoding = Encoding(enc)
+	if f.Encoding < 0 || f.Encoding > 3 {
+		return nn, ErrBadEncoding
+	}
+
+	len := int(f.FrameHeader.Size) - 10
+	n, f.Data, err = readEncodedString(r, len, f.Encoding)
+	n += nn
+	return nn, err
 }
 
 func (f *FrameText) WriteTo(w *bufio.Writer) (int, error) {

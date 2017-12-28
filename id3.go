@@ -20,6 +20,13 @@ var (
 
 	// ErrBadSync indicates an invalid synchro code was encountered.
 	ErrBadSync = errors.New("invalid sync code")
+
+	// ErrBadEncoding indicates a string used an invalid encoding type.
+	ErrBadEncoding = errors.New("invalid encoding type")
+
+	// ErrBadText indicates an invalid text string was encountered in a tag
+	// frame.
+	ErrBadText = errors.New("invalid text string encountered")
 )
 
 // A Tag represents an entire ID3 tag, including zero or more frames.
