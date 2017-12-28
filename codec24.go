@@ -2,6 +2,7 @@ package id3
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 )
 
@@ -125,11 +126,15 @@ func (h *FrameHeader) write24(w *bufio.Writer) (int, error) {
 type FrameText struct {
 	FrameHeader
 	Encoding Encoding
-	Data     string
+	Text     string
 }
 
-func newFrameText(id string) *FrameText {
-	return &FrameText{}
+func NewFrameText(id string) *FrameText {
+	return &FrameText{
+		FrameHeader{id, 1, 0},
+		EncodingUTF8,
+		"",
+	}
 }
 
 func (f *FrameText) ID() string {
@@ -156,13 +161,39 @@ func (f *FrameText) ReadFrom(r *bufio.Reader) (int, error) {
 	}
 
 	len := int(f.FrameHeader.Size) - 10
-	n, f.Data, err = readEncodedString(r, len, f.Encoding)
+	n, f.Text, err = readEncodedString(r, len, f.Encoding)
 	n += nn
 	return nn, err
 }
 
 func (f *FrameText) WriteTo(w *bufio.Writer) (int, error) {
-	return 0, nil
+	// Encode the text data.
+	b := bytes.NewBuffer(make([]byte, 0, len(f.Text)))
+	len, err := writeEncodedString(b, f.Text, f.Encoding)
+	if err != nil {
+		return 0, err
+	}
+
+	// Update the frame size based on the string's encoded length.
+	f.FrameHeader.Size = uint32(len) + 1
+
+	nn := 0
+
+	n, err := f.FrameHeader.write24(w)
+	nn += n
+	if err != nil {
+		return nn, err
+	}
+
+	err = w.WriteByte(byte(f.Encoding))
+	if err != nil {
+		return nn, err
+	}
+	nn++
+
+	n, err = w.Write(b.Bytes())
+	nn += n
+	return nn, nil
 }
 
 //

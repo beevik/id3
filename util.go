@@ -87,3 +87,41 @@ func readEncodedString(r io.Reader, len int, enc Encoding) (n int, s string, err
 		return n, "", ErrBadText
 	}
 }
+
+func writeEncodedString(w io.Writer, s string, enc Encoding) (n int, err error) {
+	switch enc {
+	case EncodingISO88591:
+		b := make([]byte, 0, len(s))
+		for _, r := range s {
+			if r > 0xff {
+				r = '.'
+			}
+			b = append(b, byte(r))
+		}
+		return w.Write(b)
+
+	case EncodingUTF16BOM:
+		n, err = w.Write([]byte{0xfe, 0xff})
+		if err != nil {
+			return n, ErrBadText
+		}
+		fallthrough
+
+	case EncodingUTF16:
+		u := utf16.Encode([]rune(s))
+		b := make([]byte, len(u)*2)
+		for i, j := 0, 0; i < len(u); i, j = i+1, j+2 {
+			b[j] = byte(u[i] >> 8)
+			b[j+1] = byte(u[i])
+		}
+		nn, err := w.Write(b)
+		n += nn
+		return n, err
+
+	case EncodingUTF8:
+		return w.Write([]byte(s))
+
+	default:
+		return 0, ErrBadText
+	}
+}

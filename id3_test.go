@@ -131,7 +131,7 @@ func TestUnsync(t *testing.T) {
 	// Test synced -> unsynced
 	for i, c := range cases {
 		for chunk := 1; chunk <= len(c.synced); chunk++ {
-			b := bytes.NewBuffer(make([]byte, 0))
+			b := bytes.NewBuffer([]byte{})
 			w := newUnsyncWriter(b)
 			for j := 0; j < len(c.synced); j += chunk {
 				right := j + chunk
@@ -207,6 +207,22 @@ func TestEncoding(t *testing.T) {
 
 		if s != c.decoded {
 			t.Errorf("case %v\n  got '%s', expected '%s'\n", i, s, c.decoded)
+		}
+	}
+
+	for i, c := range cases {
+		if c.err != "" {
+			continue
+		}
+
+		b := bytes.NewBuffer([]byte{})
+		_, err := writeEncodedString(b, c.decoded, c.encoding)
+
+		if err != nil {
+			t.Errorf("case %v\n  got error '%v'", i, c.err)
+		}
+		if bytes.Compare(b.Bytes(), c.encoded) != 0 {
+			t.Errorf("case %v\n  got '%v', expected '%v'\n", i, b.Bytes(), c.encoded)
 		}
 	}
 }
