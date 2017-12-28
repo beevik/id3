@@ -16,15 +16,31 @@ type Frame interface {
 	WriteTo(w io.Writer) (n int64, err error)
 }
 
+// A FrameHeader holds data common to all ID3 frames.
+type FrameHeader struct {
+	TextID string
+	Size   uint8
+	Flags  uint8
+}
+
+func (h *FrameHeader) ReadFrom(r io.Reader) (n int64, err error) {
+	return 0, nil
+}
+
+func (h *FrameHeader) WriteTo(w io.Writer) (n int64, err error) {
+	return 0, nil
+}
+
+// Possible values of flags stored per frame.
 const (
-	frameFlagDiscardOnTagAlteration  uint8 = 1 << 0
-	frameFlagDiscardOnFileAlteration       = 1 << 1
-	frameFlagReadOnly                      = 1 << 2
-	frameFlagHasGroupInfo                  = 1 << 3
-	frameFlagCompressed                    = 1 << 4
-	frameFlagEncrypted                     = 1 << 5
-	frameFlagUnsynchronized                = 1 << 6
-	frameFlagHasDataLength                 = 1 << 7
+	FrameFlagDiscardOnTagAlteration  uint8 = 1 << 0
+	FrameFlagDiscardOnFileAlteration       = 1 << 1
+	FrameFlagReadOnly                      = 1 << 2
+	FrameFlagHasGroupInfo                  = 1 << 3
+	FrameFlagCompressed                    = 1 << 4
+	FrameFlagEncrypted                     = 1 << 5
+	FrameFlagUnsynchronized                = 1 << 6
+	FrameFlagHasDataLength                 = 1 << 7
 )
 
 // Encoding represents the type of encoding used on a text string with an
