@@ -1,7 +1,7 @@
 package id3
 
 import (
-	"bufio"
+	"bytes"
 )
 
 // A Frame is a piece of an ID3 tag that contains information about the
@@ -10,12 +10,6 @@ type Frame interface {
 	// ID returns the 3- or 4-character string representing the type of
 	// frame.
 	ID() string
-
-	// ReadFrom reads the contents of a frame from an IO stream.
-	ReadFrom(r *bufio.Reader) (n int, err error)
-
-	// WriteTo writes the contents of a frame to an IO stream.
-	WriteTo(w *bufio.Writer) (n int, err error)
 }
 
 // A FrameHeader holds data common to all ID3 frames.
@@ -76,3 +70,37 @@ const (
 	PictureTypeBandLogotype                  = 19
 	PictureTypePublisherLogotype             = 20
 )
+
+// A codec used to encode/decode a particular type of frame.
+type frameCodec interface {
+	decode(buf bytes.Buffer) (Frame, error)
+	encode(frame Frame, buf bytes.Buffer) error
+}
+
+type FrameText struct {
+	FrameHeader
+	Encoding Encoding
+	Text     string
+}
+
+func (f *FrameText) ID() string {
+	return f.FrameHeader.IDvalue
+}
+
+func NewFrameText(id string) *FrameText {
+	return &FrameText{
+		FrameHeader{id, 1, 0},
+		EncodingUTF8,
+		"",
+	}
+}
+
+// A FrameAPIC contains an image.
+type FrameAPIC struct {
+	FrameHeader
+	Encoding    Encoding
+	MimeType    string
+	Type        PictureType
+	Description string
+	Data        []byte
+}

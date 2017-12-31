@@ -13,7 +13,21 @@ import (
 type codec24 struct {
 }
 
+var frameCodecs = map[string]frameCodec{
+	"T":    &frameCodecText_24{},
+	"APIC": &frameCodecAPIC_24{},
+}
+
 func (c *codec24) Read(t *Tag, r *bufio.Reader) (int, error) {
+	n := 0
+
+	remain := t.Size
+	for remain > 0 {
+		id, err := r.Peek(4)
+		if err != nil {
+			return n, err
+		}
+	}
 	return 0, nil
 }
 
@@ -123,25 +137,10 @@ func (h *FrameHeader) write24(w *bufio.Writer) (int, error) {
 // FrameText
 //
 
-type FrameText struct {
-	FrameHeader
-	Encoding Encoding
-	Text     string
+type frameCodecText_24 struct {
 }
 
-func NewFrameText(id string) *FrameText {
-	return &FrameText{
-		FrameHeader{id, 1, 0},
-		EncodingUTF8,
-		"",
-	}
-}
-
-func (f *FrameText) ID() string {
-	return f.FrameHeader.IDvalue
-}
-
-func (f *FrameText) ReadFrom(r *bufio.Reader) (int, error) {
+func (c *frameCodecText_24) decode(buf bytes.Buffer) (Frame, error) {
 	nn := 0
 
 	n, err := f.FrameHeader.read24(r)
@@ -166,7 +165,7 @@ func (f *FrameText) ReadFrom(r *bufio.Reader) (int, error) {
 	return nn, err
 }
 
-func (f *FrameText) WriteTo(w *bufio.Writer) (int, error) {
+func (c *frameCodecText_24) encode(frame Frame, buf bytes.Buffer) error {
 	// Encode the text data.
 	b := bytes.NewBuffer(make([]byte, 0, len(f.Text)))
 	len, err := writeEncodedString(b, f.Text, f.Encoding)
@@ -197,27 +196,16 @@ func (f *FrameText) WriteTo(w *bufio.Writer) (int, error) {
 }
 
 //
-// FrameAPIC
+// frameCodecAPIC_24
 //
 
-// A FrameAPIC contains an image.
-type FrameAPIC struct {
-	FrameHeader
-	Encoding    Encoding
-	MimeType    string
-	Type        PictureType
-	Description string
-	Data        []byte
+type frameCodecAPIC_24 struct {
 }
 
-func (f *FrameAPIC) ID() string {
-	return "APIC"
+func (c *frameCodecAPIC_24) decode(buf bytes.Buffer) (Frame, error) {
+	return nil, nil
 }
 
-func (f *FrameAPIC) ReadFrom(r *bufio.Reader) (int, error) {
-	return 0, nil
-}
-
-func (f *FrameAPIC) WriteTo(w *bufio.Writer) (int, error) {
-	return 0, nil
+func (c *frameCodecAPIC_24) encode(frame Frame, buf bytes.Buffer) error {
+	return nil
 }
