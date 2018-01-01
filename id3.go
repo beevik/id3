@@ -2,6 +2,7 @@ package id3
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"io"
 )
@@ -27,14 +28,20 @@ var (
 	// ErrBadText indicates an invalid text string was encountered in a tag
 	// frame.
 	ErrBadText = errors.New("invalid text string encountered")
+
+	ErrIncompleteFrame = errors.New("frame truncated prematurely")
+
+	ErrUnknownFrameType = errors.New("unknown frame type")
+
+	ErrInvalidEncoding = errors.New("invalid text encoding")
 )
 
 // A Tag represents an entire ID3 tag, including zero or more frames.
 type Tag struct {
-	Version uint8 // 3 or 4 (for 2.3 or 2.4)
-	Flags   uint8
-	Size    uint32
-	Frames  []Frame
+	Version uint8   // 2, 3 or 4 (for 2.2, 2.3 or 2.4)
+	Flags   uint8   // See TagFlag* list
+	Size    uint32  // Size not including the header
+	Frames  []Frame // All ID3 frames included in the tag
 }
 
 // Possible flags associated with an ID3 tag.
@@ -45,9 +52,22 @@ const (
 	TagFlagFooter             = 1 << 4
 )
 
-// ReadFrom reads from a stream into a tag.
-func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
+func getCodec(v uint8) codec {
+	switch v {
+	case 2:
+		return new(codec22)
+	case 3:
+		return new(codec23)
+	case 4:
+		return new(codec24)
+	default:
+		panic("invalid codec version")
+	}
+}
 
+// ReadFrom reads from a stream into an ID3 tag. It returns the number of
+// bytes read and any error encountered during decoding.
+func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	var nn int64
 
 	// Attempt to read the 10-byte ID3 header.
@@ -81,9 +101,6 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 		r = newUnsyncReader(r)
 	}
 
-	// Use a buffered reader so we can peek ahead.
-	b := bufio.NewReader(r)
-
 	// Process the tag size.
 	t.Size, err = readSyncSafeUint32(hdr[6:10])
 	if err != nil {
@@ -91,22 +108,48 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	}
 
 	// Instantiate a version-appropriate codec to process the data.
-	var codec codec
-	switch t.Version {
-	case 2:
-		codec = new(codec22)
-	case 3:
-		codec = new(codec23)
-	case 4:
-		codec = new(codec24)
+	codec := getCodec(t.Version)
+
+	// Decode the remaining data.
+	n, err = codec.decode(t, bufio.NewReader(r))
+	nn += int64(n)
+	return nn, err
+}
+
+// WriteTo writes an ID3 tag to an output stream. It returns the number of
+// bytes written and any error encountered during encoding.
+func (t *Tag) WriteTo(w io.Writer) (int64, error) {
+	codec := getCodec(t.Version)
+
+	// Encode everything except for the tag header into a temporary buffer.
+	tmpbuf := bytes.NewBuffer([]byte{})
+	var wtmp io.Writer = tmpbuf
+	if (t.Flags & TagFlagUnsync) != 0 {
+		wtmp = newUnsyncWriter(wtmp)
+	}
+	size, err := codec.encode(t, bufio.NewWriter(wtmp))
+	if err != nil {
+		return 0, err
 	}
 
-	// Decode the data.
-	n, err = codec.Read(t, b)
+	// Create a buffer holding the 10-byte header.
+	hdr := []byte{'I', 'D', '3', t.Version, 0, t.Flags, 0, 0, 0, 0}
+	err = writeSyncSafeUint32(hdr[6:10], uint32(size))
+	if err != nil {
+		return 0, err
+	}
+
+	var nn int64
+
+	// Write the header to the output.
+	n, err := w.Write(hdr)
 	nn += int64(n)
 	if err != nil {
 		return nn, err
 	}
 
-	return nn, nil
+	// Write the remainder of the tag to the output.
+	n, err = w.Write(tmpbuf.Bytes())
+	nn += int64(n)
+	return nn, err
 }

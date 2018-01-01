@@ -175,25 +175,148 @@ func TestUnsync(t *testing.T) {
 	}
 }
 
-func TestEncoding(t *testing.T) {
+func TestStringEncode(t *testing.T) {
 	var cases = []struct {
 		encoding Encoding
-		encoded  []byte
-		decoded  string
+		input    string
+		output   []byte
 		err      string
 	}{
-		{EncodingISO88591, []byte{0x56, 0x58, 0xa1, 0xa2, 0xc6}, "VX¡¢Æ", ""},
-		{EncodingUTF8, []byte{0xc2, 0xa9, 0xf0, 0x9d, 0x8c, 0x86, 0xe2, 0x98, 0x83}, "©𝌆☃", ""},
-		{EncodingUTF16, []byte{0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03}, "©𝌆☃", ""},
-		{EncodingUTF16, []byte{0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26}, "", "invalid text string encountered"},
-		{EncodingUTF16BOM, []byte{0xfe, 0xff, 0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03}, "©𝌆☃", ""},
-		{EncodingUTF16BOM, []byte{0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03}, "", "invalid text string encountered"},
-		{EncodingUTF16BOM, []byte{0xfe, 0xff, 0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03, 0x00}, "", "invalid text string encountered"},
+		{
+			EncodingISO88591,
+			"VX¡¢Æ",
+			[]byte{0x56, 0x58, 0xa1, 0xa2, 0xc6},
+			"",
+		},
+		{
+			EncodingISO88591,
+			"©𝌆☃",
+			[]byte{0xa9, 0x2e, 0x2e},
+			"",
+		},
+		{
+			EncodingUTF8,
+			"©𝌆☃",
+			[]byte{0xc2, 0xa9, 0xf0, 0x9d, 0x8c, 0x86, 0xe2, 0x98, 0x83},
+			"",
+		},
+		{
+			EncodingUTF16,
+			"©𝌆☃",
+			[]byte{0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03},
+			"",
+		},
+		{
+			EncodingUTF16BOM,
+			"©𝌆☃",
+			[]byte{0xfe, 0xff, 0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03},
+			"",
+		},
 	}
 
 	for i, c := range cases {
-		r := bytes.NewReader(c.encoded)
-		_, s, err := readEncodedString(r, len(c.encoded), c.encoding)
+		b := bytes.NewBuffer([]byte{})
+		_, err := writeEncodedString(b, c.input, c.encoding)
+
+		if err != nil {
+			t.Errorf("case %v\n  got error '%v'", i, c.err)
+		}
+		if bytes.Compare(b.Bytes(), c.output) != 0 {
+			t.Errorf("case %v\n  got '%v', expected '%v'\n", i, b.Bytes(), c.output)
+		}
+	}
+}
+
+func TestStringDecode(t *testing.T) {
+	var cases = []struct {
+		encoding Encoding
+		input    []byte
+		output   string
+		err      string
+	}{
+		{
+			EncodingISO88591,
+			[]byte{0x56, 0x58, 0xa1, 0xa2, 0xc6},
+			"VX¡¢Æ",
+			"",
+		},
+		{
+			EncodingISO88591,
+			[]byte{0x56, 0x58, 0xa1, 0xa2, 0xc6, 0x00},
+			"VX¡¢Æ",
+			"",
+		},
+		{
+			EncodingISO88591,
+			[]byte{0x56, 0x58, 0xa1, 0xa2, 0xc6, 0x00, 0xff},
+			"VX¡¢Æ",
+			"",
+		},
+		{
+			EncodingUTF8,
+			[]byte{0xc2, 0xa9, 0xf0, 0x9d, 0x8c, 0x86, 0xe2, 0x98, 0x83},
+			"©𝌆☃",
+			"",
+		},
+		{
+			EncodingUTF8,
+			[]byte{0xc2, 0xa9, 0xf0, 0x9d, 0x8c, 0x86, 0xe2, 0x98, 0x83, 0x00},
+			"©𝌆☃",
+			"",
+		},
+		{
+			EncodingUTF8,
+			[]byte{0xc2, 0xa9, 0xf0, 0x9d, 0x8c, 0x86, 0xe2, 0x98, 0x83, 0x00, 0x80},
+			"©𝌆☃",
+			"",
+		},
+		{
+			EncodingUTF16,
+			[]byte{0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03},
+			"©𝌆☃",
+			"",
+		},
+		{
+			EncodingUTF16,
+			[]byte{0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26},
+			"",
+			"invalid text string encountered",
+		},
+		{
+			EncodingUTF16BOM,
+			[]byte{0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03},
+			"©𝌆☃",
+			"",
+		},
+		{
+			EncodingUTF16BOM,
+			[]byte{0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03, 0x00, 0x00},
+			"©𝌆☃",
+			"",
+		},
+		{
+			EncodingUTF16,
+			[]byte{0xfe, 0xff, 0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03},
+			"©𝌆☃",
+			"",
+		},
+		{
+			EncodingUTF16BOM,
+			[]byte{0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03},
+			"©𝌆☃",
+			"",
+		},
+		{
+			EncodingUTF16BOM,
+			[]byte{0xfe, 0xff, 0x00, 0xa9, 0xd8, 0x34, 0xdf, 0x06, 0x26, 0x03, 0x00},
+			"",
+			"invalid text string encountered",
+		},
+	}
+
+	for i, c := range cases {
+		r := bytes.NewReader(c.input)
+		_, s, err := readEncodedString(r, len(c.input), c.encoding)
 
 		if err == nil && c.err != "" {
 			t.Errorf("case %v:\n  expected error '%v', got success\n", i, c.err)
@@ -205,24 +328,40 @@ func TestEncoding(t *testing.T) {
 			continue
 		}
 
-		if s != c.decoded {
-			t.Errorf("case %v\n  got '%s', expected '%s'\n", i, s, c.decoded)
+		if s != c.output {
+			t.Errorf("case %v\n  got '%s', expected '%s'\n", i, s, c.output)
 		}
 	}
+}
 
-	for i, c := range cases {
-		if c.err != "" {
-			continue
-		}
+func TestFrame(t *testing.T) {
+	inbuf := []byte{0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x3b, 0x54, 0x49, 0x54, 0x32, 0x00, 0x00,
+		0x00, 0x11, 0x00, 0x00, 0x00, 0x54, 0x68, 0x65,
+		0x20, 0x44, 0x69, 0x73, 0x61, 0x70, 0x70, 0x6f,
+		0x69, 0x6e, 0x74, 0x65, 0x64, 0x54, 0x50, 0x45,
+		0x31, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+		0x58, 0x54, 0x43, 0x54, 0x41, 0x4c, 0x42, 0x00,
+		0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x4e, 0x6f,
+		0x6e, 0x73, 0x75, 0x63, 0x68,
+	}
 
-		b := bytes.NewBuffer([]byte{})
-		_, err := writeEncodedString(b, c.decoded, c.encoding)
+	tag := &Tag{}
+	n, err := tag.ReadFrom(bytes.NewBuffer(inbuf))
+	if err != nil {
+		t.Errorf("Tag read error: %v\n", err)
+	}
+	if n != int64(len(inbuf)) {
+		t.Errorf("Tag read error: Not all bytes processed")
+	}
 
-		if err != nil {
-			t.Errorf("case %v\n  got error '%v'", i, c.err)
-		}
-		if bytes.Compare(b.Bytes(), c.encoded) != 0 {
-			t.Errorf("case %v\n  got '%v', expected '%v'\n", i, b.Bytes(), c.encoded)
-		}
+	b := bytes.NewBuffer([]byte{})
+	n, err = tag.WriteTo(b)
+	if err != nil {
+		t.Errorf("Tag write error: %v\n", err)
+	}
+	outbuf := b.Bytes()
+	if bytes.Compare(outbuf, inbuf) != 0 {
+		t.Errorf("Tag write error: Different bytes encoded")
 	}
 }

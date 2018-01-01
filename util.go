@@ -41,43 +41,56 @@ func writeSyncSafeUint32(b []byte, value uint32) error {
 }
 
 // Read an encoded text string using the specified encoding.
-func readEncodedString(r io.Reader, len int, enc Encoding) (n int, s string, err error) {
-	buf := make([]byte, len)
+func readEncodedString(r io.Reader, maxlen int, enc Encoding) (n int, s string, err error) {
+	buf := make([]byte, maxlen)
 	n, err = r.Read(buf)
 	if err != nil {
 		return n, "", err
 	}
-	if n < len {
+	if n < maxlen {
 		return n, "", ErrBadText
 	}
 
 	switch enc {
 	case EncodingISO88591:
-		runes := make([]rune, len)
-		for i := range buf {
-			runes[i] = rune(buf[i])
+		runes := make([]rune, maxlen)
+		for i, c := range buf {
+			if c == 0 {
+				runes = runes[:i]
+				break
+			}
+			runes[i] = rune(c)
 		}
 		return n, string(runes), nil
 
 	case EncodingUTF16BOM:
-		if len < 2 || buf[0] != 0xfe || buf[1] != 0xff {
-			return n, "", ErrBadText
-		}
-		buf = buf[2:]
-		len -= 2
 		fallthrough
 
 	case EncodingUTF16:
-		if (len & 1) != 0 {
+		if maxlen >= 2 && buf[0] == 0xfe && buf[1] == 0xff {
+			buf = buf[2:]
+			maxlen -= 2
+		}
+		if (maxlen & 1) != 0 {
 			return n, "", ErrBadText
 		}
-		u := make([]uint16, len/2)
-		for i, j := 0, 0; i < len; i, j = i+2, j+1 {
+		u := make([]uint16, maxlen/2)
+		for i, j := 0, 0; i < maxlen; i, j = i+2, j+1 {
 			u[j] = uint16(buf[i])<<8 | uint16(buf[i+1])
+			if u[j] == 0 {
+				u = u[:j]
+				break
+			}
 		}
 		return n, string(utf16.Decode(u)), nil
 
 	case EncodingUTF8:
+		for i, c := range buf {
+			if c == 0 {
+				buf = buf[:i]
+				break
+			}
+		}
 		if !utf8.Valid(buf) {
 			return n, "", ErrBadText
 		}

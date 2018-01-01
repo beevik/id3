@@ -73,9 +73,13 @@ const (
 
 // A codec used to encode/decode a particular type of frame.
 type frameCodec interface {
-	decode(buf bytes.Buffer) (Frame, error)
-	encode(frame Frame, buf bytes.Buffer) error
+	decode(buf *bytes.Buffer) (Frame, error)
+	encode(frame Frame, buf *bytes.Buffer) error
 }
+
+//
+// FrameText
+//
 
 type FrameText struct {
 	FrameHeader
@@ -95,7 +99,10 @@ func NewFrameText(id string) *FrameText {
 	}
 }
 
-// A FrameAPIC contains an image.
+//
+// FrameAPIC
+//
+
 type FrameAPIC struct {
 	FrameHeader
 	Encoding    Encoding
@@ -103,4 +110,8 @@ type FrameAPIC struct {
 	Type        PictureType
 	Description string
 	Data        []byte
+}
+
+func (f *FrameAPIC) ID() string {
+	return "APIC"
 }

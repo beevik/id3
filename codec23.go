@@ -8,11 +8,11 @@ import (
 type codec23 struct {
 }
 
-func (c *codec23) Read(t *Tag, r *bufio.Reader) (int, error) {
+func (c *codec23) decode(t *Tag, r *bufio.Reader) (int, error) {
 	return 0, nil
 }
 
-func (c *codec23) Write(t *Tag, w *bufio.Writer) (int, error) {
+func (c *codec23) encode(t *Tag, w *bufio.Writer) (int, error) {
 	return 0, nil
 }
 
@@ -54,7 +54,8 @@ func (h *FrameHeader) read23(r *bufio.Reader) (int, error) {
 func (h *FrameHeader) write23(w *bufio.Writer) (int, error) {
 	nn := 0
 
-	n, err := w.WriteString(h.IDvalue)
+	idval := []byte(h.IDvalue)
+	n, err := w.Write(idval)
 	nn += n
 	if err != nil {
 		return nn, err
