@@ -104,10 +104,13 @@ func (c *codec24) encode(t *Tag, w *bufio.Writer) (int, error) {
 //
 
 func decodeFrameHeader24(h *FrameHeader, r io.Reader) (int, error) {
+	nn := 0
+
 	buf := make([]byte, 10)
 	n, err := r.Read(buf)
+	nn += n
 	if n < 10 || err != nil {
-		return n, err
+		return nn, err
 	}
 
 	h.IDvalue = string(buf[0:4])
@@ -130,6 +133,13 @@ func decodeFrameHeader24(h *FrameHeader, r io.Reader) (int, error) {
 		}
 		if (flags & (1 << 6)) != 0 {
 			h.Flags |= FrameFlagHasGroupInfo
+			buf := make([]byte, 1)
+			n, err = r.Read(buf)
+			nn += n
+			if err != nil {
+				return nn, err
+			}
+			h.GroupID = buf[0]
 		}
 		if (flags & (1 << 3)) != 0 {
 			h.Flags |= FrameFlagCompressed
@@ -142,9 +152,27 @@ func decodeFrameHeader24(h *FrameHeader, r io.Reader) (int, error) {
 		}
 		if (flags & (1 << 0)) != 0 {
 			h.Flags |= FrameFlagHasDataLength
+			buf := make([]byte, 4)
+			n, err = r.Read(buf)
+			nn += n
+			if err != nil {
+				return nn, err
+			}
+			h.DataLength, err = readSyncSafeUint32(buf)
+			if err != nil {
+				return nn, err
+			}
 		}
 	}
-	return n, nil
+
+	// If the frame is compressed or encrypted, it must include a data length
+	// indicator.
+	if (h.Flags&(FrameFlagCompressed|FrameFlagEncrypted)) != 0 &&
+		(h.Flags&FrameFlagHasDataLength) == 0 {
+		return nn, ErrInvalidFrameFlags
+	}
+
+	return nn, nil
 }
 
 func encodeFrameHeader24(h *FrameHeader, w io.Writer) (int, error) {
@@ -165,6 +193,10 @@ func encodeFrameHeader24(h *FrameHeader, w io.Writer) (int, error) {
 
 	var flags uint16
 	if h.Flags != 0 {
+		if (h.Flags&(FrameFlagCompressed|FrameFlagEncrypted)) != 0 &&
+			(h.Flags&FrameFlagHasDataLength) == 0 {
+			return nn, ErrInvalidFrameFlags
+		}
 		if (h.Flags & FrameFlagDiscardOnTagAlteration) != 0 {
 			flags |= 1 << 14
 		}
@@ -195,6 +227,32 @@ func encodeFrameHeader24(h *FrameHeader, w io.Writer) (int, error) {
 
 	n, err = w.Write(buf)
 	nn += n
+	if err != nil {
+		return nn, err
+	}
+
+	if (h.Flags & FrameFlagHasGroupInfo) != 0 {
+		buf := []byte{h.GroupID}
+		n, err = w.Write(buf)
+		nn += n
+		if err != nil {
+			return nn, err
+		}
+	}
+
+	if (h.Flags & FrameFlagHasDataLength) != 0 {
+		buf := make([]byte, 4)
+		err = writeSyncSafeUint32(buf, h.DataLength)
+		if err != nil {
+			return nn, err
+		}
+		n, err = w.Write(buf)
+		nn += n
+		if err != nil {
+			return nn, err
+		}
+	}
+
 	return nn, err
 }
 

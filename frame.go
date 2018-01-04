@@ -14,21 +14,23 @@ type Frame interface {
 
 // A FrameHeader holds data common to all ID3 frames.
 type FrameHeader struct {
-	IDvalue string // 3 or 4 character ID string
-	Size    uint32 // frame size not including header
-	Flags   uint8  // See FrameFlag*
+	IDvalue    string // 3 or 4 character ID string
+	Size       uint32 // frame size not including header
+	Flags      uint8  // See FrameFlag*
+	GroupID    uint8  // Optional group identifier
+	DataLength uint32 // Optional data length (if FrameFlagHasDataLength is set)
 }
 
 // Possible values of flags stored per frame.
 const (
-	FrameFlagDiscardOnTagAlteration  uint8 = 1 << 0
-	FrameFlagDiscardOnFileAlteration       = 1 << 1
-	FrameFlagReadOnly                      = 1 << 2
-	FrameFlagHasGroupInfo                  = 1 << 3
-	FrameFlagCompressed                    = 1 << 4
-	FrameFlagEncrypted                     = 1 << 5
-	FrameFlagUnsynchronized                = 1 << 6
-	FrameFlagHasDataLength                 = 1 << 7
+	FrameFlagDiscardOnTagAlteration  uint8 = 1 << 0 // Discard frame if tag is altered
+	FrameFlagDiscardOnFileAlteration       = 1 << 1 // Discard frame if file is altered
+	FrameFlagReadOnly                      = 1 << 2 // Frame is read-only
+	FrameFlagHasGroupInfo                  = 1 << 3 // Frame has group info
+	FrameFlagCompressed                    = 1 << 4 // Frame is compressed
+	FrameFlagEncrypted                     = 1 << 5 // Frame is encrypted
+	FrameFlagUnsynchronized                = 1 << 6 // Frame is unsynchronized
+	FrameFlagHasDataLength                 = 1 << 7 // Frame has a data length indicator
 )
 
 // Encoding represents the type of encoding used on a text string with an
@@ -93,7 +95,7 @@ func (f *FrameText) ID() string {
 
 func NewFrameText(id string) *FrameText {
 	return &FrameText{
-		FrameHeader{id, 1, 0},
+		FrameHeader{id, 1, 0, 0, 0},
 		EncodingUTF8,
 		"",
 	}

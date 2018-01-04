@@ -7,33 +7,18 @@ import (
 	"io"
 )
 
+// Possible errors returned by this package.
 var (
-	// ErrInvalidTag indicates an invalid ID3 header.
-	ErrInvalidTag = errors.New("invalid id3 tag")
-
-	// ErrInvalidVersion indicates an invalid ID3 version number. Must be
-	// 2.3 or 2.4.
-	ErrInvalidVersion = errors.New("invalid id3 version")
-
-	// ErrInvalidHeaderFlags indicates an invalid header flag was set in the
-	// ID3 tag.
+	ErrInvalidTag         = errors.New("invalid id3 tag")
+	ErrInvalidVersion     = errors.New("invalid id3 version")
 	ErrInvalidHeaderFlags = errors.New("invalid header flags")
-
-	// ErrBadSync indicates an invalid synchro code was encountered.
-	ErrBadSync = errors.New("invalid sync code")
-
-	// ErrBadEncoding indicates a string used an invalid encoding type.
-	ErrBadEncoding = errors.New("invalid encoding type")
-
-	// ErrBadText indicates an invalid text string was encountered in a tag
-	// frame.
-	ErrBadText = errors.New("invalid text string encountered")
-
-	ErrIncompleteFrame = errors.New("frame truncated prematurely")
-
-	ErrUnknownFrameType = errors.New("unknown frame type")
-
-	ErrInvalidEncoding = errors.New("invalid text encoding")
+	ErrBadSync            = errors.New("invalid sync code")
+	ErrBadEncoding        = errors.New("invalid encoding type")
+	ErrBadText            = errors.New("invalid text string encountered")
+	ErrIncompleteFrame    = errors.New("frame truncated prematurely")
+	ErrUnknownFrameType   = errors.New("unknown frame type")
+	ErrInvalidEncoding    = errors.New("invalid text encoding")
+	ErrInvalidFrameFlags  = errors.New("invalid frame flags")
 )
 
 // A Tag represents an entire ID3 tag, including zero or more frames.
