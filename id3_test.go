@@ -215,14 +215,13 @@ func TestStringEncode(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		b := bytes.NewBuffer([]byte{})
-		_, err := writeEncodedString(b, c.input, c.encoding)
+		b, err := encodeString(c.input, c.encoding)
 
 		if err != nil {
 			t.Errorf("case %v\n  got error '%v'", i, c.err)
 		}
-		if bytes.Compare(b.Bytes(), c.output) != 0 {
-			t.Errorf("case %v\n  got '%v', expected '%v'\n", i, b.Bytes(), c.output)
+		if bytes.Compare(b, c.output) != 0 {
+			t.Errorf("case %v\n  got '%v', expected '%v'\n", i, b, c.output)
 		}
 	}
 }
@@ -315,8 +314,7 @@ func TestStringDecode(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		r := bytes.NewReader(c.input)
-		_, s, err := readEncodedString(r, len(c.input), c.encoding)
+		s, err := decodeString(c.input, c.encoding)
 
 		if err == nil && c.err != "" {
 			t.Errorf("case %v:\n  expected error '%v', got success\n", i, c.err)

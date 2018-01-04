@@ -1,7 +1,6 @@
 package id3
 
 import (
-	"bytes"
 	"encoding/binary"
 	"io"
 )
@@ -285,9 +284,8 @@ func (c *frameText24) decode(h *FrameHeader, buf []byte) (FrameData, error) {
 	f := &FrameDataText{}
 	f.Encoding = Encoding(buf[0])
 
-	btmp := bytes.NewBuffer(buf[1:])
 	var err error
-	_, f.Text, err = readEncodedString(btmp, btmp.Len(), f.Encoding)
+	f.Text, err = decodeString(buf[1:], f.Encoding)
 	if err != nil {
 		return nil, err
 	}
@@ -298,16 +296,13 @@ func (c *frameText24) decode(h *FrameHeader, buf []byte) (FrameData, error) {
 func (c *frameText24) encode(h *FrameHeader, d FrameData) ([]byte, error) {
 	t := d.(*FrameDataText)
 
-	tmpbuf := bytes.NewBuffer([]byte{})
-	err := tmpbuf.WriteByte(byte(t.Encoding))
+	buf := make([]byte, 0, len(t.Text)+1)
+	buf = append(buf, byte(t.Encoding))
+
+	b, err := encodeString(t.Text, t.Encoding)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = writeEncodedString(tmpbuf, t.Text, t.Encoding)
-	if err != nil {
-		return nil, err
-	}
-
-	return tmpbuf.Bytes(), nil
+	return append(buf, b...), nil
 }

@@ -1,7 +1,6 @@
 package id3
 
 import (
-	"io"
 	"unicode/utf16"
 	"unicode/utf8"
 )
@@ -40,101 +39,87 @@ func writeSyncSafeUint32(b []byte, value uint32) error {
 	return nil
 }
 
-// Read an encoded text string using the specified encoding.
-func readEncodedString(r io.Reader, maxlen int, enc Encoding) (n int, s string, err error) {
-	buf := make([]byte, maxlen)
-	n, err = r.Read(buf)
-	if err != nil {
-		return n, "", err
-	}
-	if n < maxlen {
-		return n, "", ErrBadText
-	}
-
+// Decode a string stored in a byte slice.
+func decodeString(b []byte, enc Encoding) (string, error) {
 	switch enc {
 	case EncodingISO88591:
-		runes := make([]rune, maxlen)
-		for i, c := range buf {
+		runes := make([]rune, 0, len(b))
+		for _, c := range b {
 			if c == 0 {
-				runes = runes[:i]
 				break
 			}
-			runes[i] = rune(c)
+			runes = append(runes, rune(c))
 		}
-		return n, string(runes), nil
+		return string(runes), nil
 
 	case EncodingUTF16BOM:
 		fallthrough
 
 	case EncodingUTF16:
-		if maxlen >= 2 && buf[0] == 0xfe && buf[1] == 0xff {
-			buf = buf[2:]
-			maxlen -= 2
+		if len(b) >= 2 && b[0] == 0xfe && b[1] == 0xff {
+			b = b[2:]
 		}
-		if (maxlen & 1) != 0 {
-			return n, "", ErrBadText
+		if (len(b) & 1) != 0 {
+			return "", ErrBadText
 		}
-		u := make([]uint16, maxlen/2)
-		for i, j := 0, 0; i < maxlen; i, j = i+2, j+1 {
-			u[j] = uint16(buf[i])<<8 | uint16(buf[i+1])
+		u := make([]uint16, len(b)/2)
+		for i, j := 0, 0; i < len(b); i, j = i+2, j+1 {
+			u[j] = uint16(b[i])<<8 | uint16(b[i+1])
 			if u[j] == 0 {
 				u = u[:j]
 				break
 			}
 		}
-		return n, string(utf16.Decode(u)), nil
+		return string(utf16.Decode(u)), nil
 
 	case EncodingUTF8:
-		for i, c := range buf {
-			if c == 0 {
-				buf = buf[:i]
+		for i := 0; i < len(b); i++ {
+			if b[i] == 0 {
+				b = b[:i]
 				break
 			}
 		}
-		if !utf8.Valid(buf) {
-			return n, "", ErrBadText
+		if !utf8.Valid(b) {
+			return "", ErrBadText
 		}
-		return n, string(buf), nil
+		return string(b), nil
 
 	default:
-		return n, "", ErrBadText
+		return "", ErrBadText
 	}
 }
 
-func writeEncodedString(w io.Writer, s string, enc Encoding) (n int, err error) {
+// Encode a string to a byte slice.
+func encodeString(s string, enc Encoding) ([]byte, error) {
+	var b []byte
+
 	switch enc {
 	case EncodingISO88591:
-		b := make([]byte, 0, len(s))
+		b = make([]byte, 0, len(s))
 		for _, r := range s {
 			if r > 0xff {
 				r = '.'
 			}
 			b = append(b, byte(r))
 		}
-		return w.Write(b)
+		return b, nil
 
 	case EncodingUTF16BOM:
-		n, err = w.Write([]byte{0xfe, 0xff})
-		if err != nil {
-			return n, ErrBadText
-		}
+		b = make([]byte, 0, len(s)*2)
+		b = append(b, []byte{0xfe, 0xff}...)
 		fallthrough
 
 	case EncodingUTF16:
 		u := utf16.Encode([]rune(s))
-		b := make([]byte, len(u)*2)
 		for i, j := 0, 0; i < len(u); i, j = i+1, j+2 {
-			b[j] = byte(u[i] >> 8)
-			b[j+1] = byte(u[i])
+			b = append(b, []byte{byte(u[i] >> 8), byte(u[i])}...)
 		}
-		nn, err := w.Write(b)
-		n += nn
-		return n, err
+		return b, nil
 
 	case EncodingUTF8:
-		return w.Write([]byte(s))
+		return []byte(s), nil
 
 	default:
-		return 0, ErrBadText
+		return nil, ErrBadText
 	}
 }
