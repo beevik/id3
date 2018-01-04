@@ -78,7 +78,7 @@ func TestSyncUint32(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		out, err := readSyncSafeUint32(c.input)
+		out, err := decodeSyncSafeUint32(c.input)
 
 		if err == nil && c.err != "" {
 			t.Errorf("case %v:\n  expected error '%v', got success\n", i, c.err)
@@ -100,7 +100,7 @@ func TestSyncUint32(t *testing.T) {
 			continue
 		}
 		buf := make([]byte, len(c.input))
-		err := writeSyncSafeUint32(buf, c.output)
+		err := encodeSyncSafeUint32(buf, c.output)
 
 		if err != nil {
 			t.Errorf("case %v\n  got error '%v', expected '%v'\n", i, err, c.input)

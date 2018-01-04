@@ -8,17 +8,18 @@ import (
 
 // Possible errors returned by this package.
 var (
-	ErrInvalidTag         = errors.New("invalid id3 tag")
-	ErrInvalidVersion     = errors.New("invalid id3 version")
-	ErrInvalidHeaderFlags = errors.New("invalid header flags")
-	ErrBadSync            = errors.New("invalid sync code")
-	ErrBadEncoding        = errors.New("invalid encoding type")
-	ErrBadText            = errors.New("invalid text string encountered")
-	ErrIncompleteFrame    = errors.New("frame truncated prematurely")
-	ErrUnknownFrameType   = errors.New("unknown frame type")
-	ErrInvalidEncoding    = errors.New("invalid text encoding")
-	ErrInvalidFrameHeader = errors.New("invalid frame header")
-	ErrInvalidFrameFlags  = errors.New("invalid frame flags")
+	ErrInvalidTag           = errors.New("invalid id3 tag")
+	ErrInvalidVersion       = errors.New("invalid id3 version")
+	ErrInvalidHeaderFlags   = errors.New("invalid header flags")
+	ErrBadSync              = errors.New("invalid sync code")
+	ErrBadEncoding          = errors.New("invalid encoding type")
+	ErrBadText              = errors.New("invalid text string encountered")
+	ErrIncompleteFrame      = errors.New("frame truncated prematurely")
+	ErrUnknownFrameType     = errors.New("unknown frame type")
+	ErrInvalidEncoding      = errors.New("invalid text encoding")
+	ErrInvalidFrameHeader   = errors.New("invalid frame header")
+	ErrInvalidFrameFlags    = errors.New("invalid frame flags")
+	ErrInvalidEncodedString = errors.New("invalid encoded string")
 )
 
 // A Tag represents an entire ID3 tag, including zero or more frames.
@@ -87,7 +88,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	}
 
 	// Process the tag size.
-	t.Size, err = readSyncSafeUint32(hdr[6:10])
+	t.Size, err = decodeSyncSafeUint32(hdr[6:10])
 	if err != nil {
 		return nn, err
 	}
@@ -119,7 +120,7 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 
 	// Create a buffer holding the 10-byte header.
 	hdr := []byte{'I', 'D', '3', t.Version, 0, t.Flags, 0, 0, 0, 0}
-	err = writeSyncSafeUint32(hdr[6:10], uint32(size))
+	err = encodeSyncSafeUint32(hdr[6:10], uint32(size))
 	if err != nil {
 		return 0, err
 	}

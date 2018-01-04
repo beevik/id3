@@ -13,23 +13,25 @@ type codec24 struct {
 }
 
 var frameCodecs = map[string]frameCodec{
-	"T": &frameText24{},
+	"T": &frameCodecText24{},
 }
 
 func (c *codec24) decode(t *Tag, r io.Reader) (int, error) {
 	nn := 0
 	for remain := t.Size; remain > 0; {
 
-		// Read the frame header.
-		var h FrameHeader
-		n, err := decodeFrameHeader24(&h, r)
+		// Create an empty frame.
+		f := Frame{}
+
+		// Decode the frame header.
+		n, err := decodeFrameHeader24(&f.Header, r)
 		nn += n
 		if err != nil {
 			return nn, err
 		}
 
 		// Select a frame codec based on the frame header's ID value.
-		id := string(h.IDvalue)
+		id := string(f.Header.ID)
 		if id[0] == 'T' && id != "TXXX" {
 			id = "T"
 		}
@@ -38,24 +40,24 @@ func (c *codec24) decode(t *Tag, r io.Reader) (int, error) {
 			return nn, ErrUnknownFrameType
 		}
 
-		// Read the rest of the frame into a buffer.
-		framebuf := make([]byte, h.Size)
-		n, err = r.Read(framebuf)
+		// Read the frame's payload into a buffer.
+		databuf := make([]byte, f.Header.Size-extraBytes24(&f.Header))
+		n, err = r.Read(databuf)
 		nn += n
 		if err != nil {
 			return nn, err
 		}
 
 		// Decode the contents of the buffer, generating the frame data.
-		d, err := fc.decode(&h, framebuf)
+		f.Data, err = fc.decode(&f.Header, databuf)
 		if err != nil {
 			return nn, err
 		}
 
-		// Add to the tag's list of frames.
-		t.Frames = append(t.Frames, Frame{h, d})
+		// Add the frame to the tag.
+		t.Frames = append(t.Frames, f)
 
-		remain -= h.Size + 10
+		remain -= f.Header.Size + 10
 	}
 
 	return nn, nil
@@ -66,7 +68,7 @@ func (c *codec24) encode(t *Tag, w io.Writer) (int, error) {
 
 	for _, f := range t.Frames {
 		// Select a frame codec based on the frame's ID value.
-		id := string(f.Header.IDvalue)
+		id := string(f.Header.ID)
 		if id[0] == 'T' && id != "TXXX" {
 			id = "T"
 		}
@@ -75,16 +77,17 @@ func (c *codec24) encode(t *Tag, w io.Writer) (int, error) {
 			return nn, ErrUnknownFrameType
 		}
 
-		// Encode the frame data (not including the header) into a new buffer.
+		// Encode the frame data (not including the header) into a
+		// new payload buffer.
 		buf, err := fc.encode(&f.Header, f.Data)
 		if err != nil {
 			return nn, err
 		}
 
-		// Update the frame header's size based on the contents of the
-		// buffer.
+		// Update the rame header's size field based on the contents of the
+		// payload buffer.
 		h := f.Header
-		h.Size = uint32(len(buf)) + h.ExtraBytes()
+		h.Size = uint32(len(buf)) + extraBytes24(&h)
 
 		// Write the updated frame header to the output.
 		n, err := encodeFrameHeader24(&h, w)
@@ -120,8 +123,8 @@ func decodeFrameHeader24(h *FrameHeader, r io.Reader) (int, error) {
 	}
 
 	// Process the header ID and size.
-	h.IDvalue = string(buf[0:4])
-	h.Size, err = readSyncSafeUint32(buf[4:8])
+	h.ID = string(buf[0:4])
+	h.Size, err = decodeSyncSafeUint32(buf[4:8])
 	if err != nil {
 		return n, err
 	}
@@ -144,19 +147,22 @@ func decodeFrameHeader24(h *FrameHeader, r io.Reader) (int, error) {
 		}
 		if (flags & (1 << 6)) != 0 {
 			h.Flags |= FrameFlagHasGroupInfo
-			buf := make([]byte, 1)
-			n, err = r.Read(buf)
-			nn += n
+			h.GroupID, err = readByte(r)
+			nn++
 			if err != nil {
 				return nn, err
 			}
-			h.GroupID = buf[0]
 		}
 		if (flags & (1 << 3)) != 0 {
 			h.Flags |= FrameFlagCompressed
 		}
 		if (flags & (1 << 2)) != 0 {
 			h.Flags |= FrameFlagEncrypted
+			h.EncryptMethod, err = readByte(r)
+			nn++
+			if err != nil {
+				return nn, err
+			}
 		}
 		if (flags & (1 << 1)) != 0 {
 			h.Flags |= FrameFlagUnsynchronized
@@ -169,16 +175,14 @@ func decodeFrameHeader24(h *FrameHeader, r io.Reader) (int, error) {
 			if err != nil {
 				return nn, err
 			}
-			h.DataLength, err = readSyncSafeUint32(buf)
+			h.DataLength, err = decodeSyncSafeUint32(buf)
 			if err != nil {
 				return nn, err
 			}
 		}
 
-		// If the frame is compressed or encrypted, it must include a data
-		// length indicator.
-		if (h.Flags&(FrameFlagCompressed|FrameFlagEncrypted)) != 0 &&
-			(h.Flags&FrameFlagHasDataLength) == 0 {
+		// If the frame is compressed, it must include a data length indicator.
+		if (h.Flags&FrameFlagCompressed) != 0 && (h.Flags&FrameFlagHasDataLength) == 0 {
 			return nn, ErrInvalidFrameFlags
 		}
 	}
@@ -190,7 +194,7 @@ func encodeFrameHeader24(h *FrameHeader, w io.Writer) (int, error) {
 	nn := 0
 
 	// Write the frame ID.
-	idval := []byte(h.IDvalue)
+	idval := []byte(h.ID)
 	n, err := w.Write(idval)
 	nn += n
 	if err != nil {
@@ -200,17 +204,14 @@ func encodeFrameHeader24(h *FrameHeader, w io.Writer) (int, error) {
 	// Create a 6-byte buffer for the rest of the header and store the
 	// frame size in it.
 	buf := make([]byte, 6)
-	err = writeSyncSafeUint32(buf[0:4], h.Size)
+	err = encodeSyncSafeUint32(buf[0:4], h.Size)
 	if err != nil {
 		return nn, err
 	}
 
+	// Generate the flags field.
 	var flags uint16
 	if h.Flags != 0 {
-		if (h.Flags&(FrameFlagCompressed|FrameFlagEncrypted)) != 0 &&
-			(h.Flags&FrameFlagHasDataLength) == 0 {
-			return nn, ErrInvalidFrameFlags
-		}
 		if (h.Flags & FrameFlagDiscardOnTagAlteration) != 0 {
 			flags |= 1 << 14
 		}
@@ -225,6 +226,9 @@ func encodeFrameHeader24(h *FrameHeader, w io.Writer) (int, error) {
 		}
 		if (h.Flags & FrameFlagCompressed) != 0 {
 			flags |= 1 << 3
+			if (h.Flags & FrameFlagHasDataLength) == 0 {
+				return nn, ErrInvalidFrameFlags
+			}
 		}
 		if (h.Flags & FrameFlagEncrypted) != 0 {
 			flags |= 1 << 2
@@ -239,44 +243,65 @@ func encodeFrameHeader24(h *FrameHeader, w io.Writer) (int, error) {
 	buf[4] = uint8(flags >> 8)
 	buf[5] = uint8(flags)
 
+	// Write the header.
 	n, err = w.Write(buf)
 	nn += n
 	if err != nil {
 		return nn, err
 	}
 
-	if (h.Flags & FrameFlagHasGroupInfo) != 0 {
-		buf := []byte{h.GroupID}
-		n, err = w.Write(buf)
-		nn += n
-		if err != nil {
-			return nn, err
+	// Write any extra data indicated by flags.
+	if h.Flags != 0 {
+		ex := make([]byte, 0)
+		if (h.Flags & FrameFlagHasGroupInfo) != 0 {
+			ex = append(ex, h.GroupID)
 		}
-	}
-
-	if (h.Flags & FrameFlagHasDataLength) != 0 {
-		buf := make([]byte, 4)
-		err = writeSyncSafeUint32(buf, h.DataLength)
-		if err != nil {
-			return nn, err
+		if (h.Flags & FrameFlagEncrypted) != 0 {
+			ex = append(ex, h.EncryptMethod)
 		}
-		n, err = w.Write(buf)
-		nn += n
-		if err != nil {
-			return nn, err
+		if (h.Flags & FrameFlagHasDataLength) != 0 {
+			len := make([]byte, 4)
+			err = encodeSyncSafeUint32(len, h.DataLength)
+			ex = append(ex, len...)
+			if err != nil {
+				return nn, err
+			}
+		}
+		if len(ex) > 0 {
+			n, err = w.Write(ex)
+			nn += n
+			if err != nil {
+				return nn, err
+			}
 		}
 	}
 
 	return nn, err
 }
 
+// Return the total number of bytes required to store the frame header and any
+// extra fields indicated by the header flags.
+func extraBytes24(h *FrameHeader) uint32 {
+	var n uint32
+	if (h.Flags & FrameFlagHasGroupInfo) != 0 {
+		n++
+	}
+	if (h.Flags & FrameFlagEncrypted) != 0 {
+		n++
+	}
+	if (h.Flags & FrameFlagHasDataLength) != 0 {
+		n += 4
+	}
+	return n
+}
+
 //
-// frameText24: v2.4 Text frame codec
+// frameCodecText24: v2.4 Text frame codec
 //
 
-type frameText24 struct{}
+type frameCodecText24 struct{}
 
-func (c *frameText24) decode(h *FrameHeader, buf []byte) (FrameData, error) {
+func (c *frameCodecText24) decode(h *FrameHeader, buf []byte) (FrameData, error) {
 	if buf[0] > 3 {
 		return nil, ErrInvalidEncoding
 	}
@@ -293,7 +318,7 @@ func (c *frameText24) decode(h *FrameHeader, buf []byte) (FrameData, error) {
 	return f, nil
 }
 
-func (c *frameText24) encode(h *FrameHeader, d FrameData) ([]byte, error) {
+func (c *frameCodecText24) encode(h *FrameHeader, d FrameData) ([]byte, error) {
 	t := d.(*FrameDataText)
 
 	buf := make([]byte, 0, len(t.Text)+1)

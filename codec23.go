@@ -23,7 +23,7 @@ func (h *FrameHeader) read23(r io.Reader) (int, error) {
 		return n, err
 	}
 
-	h.IDvalue = string(buf[0:4])
+	h.ID = string(buf[0:4])
 	h.Size = binary.BigEndian.Uint32(buf[4:8])
 	h.Flags = 0
 
@@ -54,7 +54,7 @@ func (h *FrameHeader) read23(r io.Reader) (int, error) {
 func (h *FrameHeader) write23(w io.Writer) (int, error) {
 	nn := 0
 
-	idval := []byte(h.IDvalue)
+	idval := []byte(h.ID)
 	n, err := w.Write(idval)
 	nn += n
 	if err != nil {

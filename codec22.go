@@ -22,7 +22,7 @@ func (h *FrameHeader) read22(r io.Reader) (int, error) {
 		return n, err
 	}
 
-	h.IDvalue = string(buf[0:3])
+	h.ID = string(buf[0:3])
 	h.Size = uint32(buf[3])<<16 + uint32(buf[4])<<8 + uint32(buf[5])
 	h.Flags = 0
 
@@ -32,7 +32,7 @@ func (h *FrameHeader) read22(r io.Reader) (int, error) {
 func (h *FrameHeader) write22(w io.Writer) (int, error) {
 	nn := 0
 
-	idval := []byte(h.IDvalue)
+	idval := []byte(h.ID)
 	n, err := w.Write(idval)
 	nn += n
 	if err != nil {

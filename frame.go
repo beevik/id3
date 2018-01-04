@@ -10,24 +10,12 @@ type Frame struct {
 
 // A FrameHeader holds data common to all ID3 frames.
 type FrameHeader struct {
-	IDvalue    string // 3 or 4 character ID string
-	Size       uint32 // frame size not including header
-	Flags      uint8  // See FrameFlag*
-	GroupID    uint8  // Optional group identifier
-	DataLength uint32 // Optional data length (if FrameFlagHasDataLength is set)
-}
-
-// ExtraBytes returns the number of additional bytes required to store the
-// header's extended fields.
-func (h *FrameHeader) ExtraBytes() uint32 {
-	var n uint32
-	if (h.Flags & FrameFlagHasGroupInfo) != 0 {
-		n++
-	}
-	if (h.Flags & FrameFlagHasDataLength) != 0 {
-		n += 4
-	}
-	return n
+	ID            string // Frame ID string
+	Size          uint32 // Frame size not including 10-byte header
+	Flags         uint8  // See FrameFlag*
+	GroupID       uint8  // Optional group identifier
+	EncryptMethod uint8  // Optional encryption method identifier
+	DataLength    uint32 // Optional data length (if FrameFlagHasDataLength is set)
 }
 
 // Possible values of flags stored per frame.
@@ -40,18 +28,6 @@ const (
 	FrameFlagEncrypted                     = 1 << 5 // Frame is encrypted
 	FrameFlagUnsynchronized                = 1 << 6 // Frame is unsynchronized
 	FrameFlagHasDataLength                 = 1 << 7 // Frame has a data length indicator
-)
-
-// Encoding represents the type of encoding used on a text string with an
-// ID3 frame.
-type Encoding uint8
-
-// Possible values used to indicate the type of text encoding.
-const (
-	EncodingISO88591 Encoding = 0
-	EncodingUTF16BOM          = 1
-	EncodingUTF16             = 2
-	EncodingUTF8              = 3
 )
 
 // PictureType represents the type of picture stored in an APIC frame.
