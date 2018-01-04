@@ -1,22 +1,22 @@
 package id3
 
 import (
-	"bufio"
 	"encoding/binary"
+	"io"
 )
 
 type codec23 struct {
 }
 
-func (c *codec23) decode(t *Tag, r *bufio.Reader) (int, error) {
+func (c *codec23) decode(t *Tag, r io.Reader) (int, error) {
 	return 0, nil
 }
 
-func (c *codec23) encode(t *Tag, w *bufio.Writer) (int, error) {
+func (c *codec23) encode(t *Tag, w io.Writer) (int, error) {
 	return 0, nil
 }
 
-func (h *FrameHeader) read23(r *bufio.Reader) (int, error) {
+func (h *FrameHeader) read23(r io.Reader) (int, error) {
 	buf := make([]byte, 10)
 	n, err := r.Read(buf)
 	if n < 10 || err != nil {
@@ -51,7 +51,7 @@ func (h *FrameHeader) read23(r *bufio.Reader) (int, error) {
 	return n, nil
 }
 
-func (h *FrameHeader) write23(w *bufio.Writer) (int, error) {
+func (h *FrameHeader) write23(w io.Writer) (int, error) {
 	nn := 0
 
 	idval := []byte(h.IDvalue)

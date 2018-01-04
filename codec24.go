@@ -1,7 +1,6 @@
 package id3
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
 	"io"
@@ -18,11 +17,16 @@ var frameCodecs = map[string]frameCodec{
 	"T": &frameText24{},
 }
 
-func (c *codec24) decode(t *Tag, r *bufio.Reader) (int, error) {
+func (c *codec24) decode(t *Tag, r io.Reader) (int, error) {
 	nn := 0
 	for remain := t.Size; remain > 0; {
 		// Peek at the frame header.
-		hdrbuf, err := r.Peek(10)
+		hdrbuf := make([]byte, 10)
+		n, err := r.Read(hdrbuf)
+		nn += n
+		if n < 10 {
+			return nn, ErrInvalidFrameHeader
+		}
 		if err != nil {
 			return nn, err
 		}
@@ -43,16 +47,16 @@ func (c *codec24) decode(t *Tag, r *bufio.Reader) (int, error) {
 			return nn, err
 		}
 
-		// Read the entire frame, including the header, into a buffer
-		buf := make([]byte, size+10)
-		n, err := r.Read(buf)
+		// Read the rest of the frame into a buffer
+		framebuf := make([]byte, size)
+		n, err = r.Read(framebuf)
 		nn += n
 		if err != nil {
 			return nn, err
 		}
 
 		// Decode the contents of the buffer, generating a frame.
-		f, err := fc.decode(bytes.NewBuffer(buf))
+		f, err := fc.decode(bytes.NewBuffer(append(hdrbuf, framebuf...)))
 		if err != nil {
 			return nn, err
 		}
@@ -66,7 +70,7 @@ func (c *codec24) decode(t *Tag, r *bufio.Reader) (int, error) {
 	return nn, nil
 }
 
-func (c *codec24) encode(t *Tag, w *bufio.Writer) (int, error) {
+func (c *codec24) encode(t *Tag, w io.Writer) (int, error) {
 	nn := 0
 
 	for _, f := range t.Frames {
@@ -95,8 +99,7 @@ func (c *codec24) encode(t *Tag, w *bufio.Writer) (int, error) {
 		}
 	}
 
-	err := w.Flush()
-	return nn, err
+	return nn, nil
 }
 
 //

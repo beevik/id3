@@ -1,8 +1,8 @@
 package id3
 
-import "bufio"
+import "io"
 
 type codec interface {
-	decode(t *Tag, r *bufio.Reader) (int, error)
-	encode(t *Tag, w *bufio.Writer) (int, error)
+	decode(t *Tag, r io.Reader) (int, error)
+	encode(t *Tag, w io.Writer) (int, error)
 }

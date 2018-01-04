@@ -1,7 +1,6 @@
 package id3
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"io"
@@ -18,6 +17,7 @@ var (
 	ErrIncompleteFrame    = errors.New("frame truncated prematurely")
 	ErrUnknownFrameType   = errors.New("unknown frame type")
 	ErrInvalidEncoding    = errors.New("invalid text encoding")
+	ErrInvalidFrameHeader = errors.New("invalid frame header")
 	ErrInvalidFrameFlags  = errors.New("invalid frame flags")
 )
 
@@ -96,7 +96,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	codec := getCodec(t.Version)
 
 	// Decode the remaining data.
-	n, err = codec.decode(t, bufio.NewReader(r))
+	n, err = codec.decode(t, r)
 	nn += int64(n)
 	return nn, err
 }
@@ -112,7 +112,7 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 	if (t.Flags & TagFlagUnsync) != 0 {
 		wtmp = newUnsyncWriter(wtmp)
 	}
-	size, err := codec.encode(t, bufio.NewWriter(wtmp))
+	size, err := codec.encode(t, wtmp)
 	if err != nil {
 		return 0, err
 	}
