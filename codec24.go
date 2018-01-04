@@ -20,20 +20,18 @@ var frameCodecs = map[string]frameCodec{
 func (c *codec24) decode(t *Tag, r io.Reader) (int, error) {
 	nn := 0
 	for remain := t.Size; remain > 0; {
-		// Peek at the frame header.
-		hdrbuf := make([]byte, 10)
-		n, err := r.Read(hdrbuf)
+
+		// Read the frame header.
+		var h FrameHeader
+		n, err := decodeFrameHeader24(&h, r)
 		nn += n
-		if n < 10 {
-			return nn, ErrInvalidFrameHeader
-		}
 		if err != nil {
 			return nn, err
 		}
 
 		// Select a frame codec based on the frame header's ID value.
-		id := string(hdrbuf[0:4])
-		if id[0] == 'T' {
+		id := string(h.IDvalue)
+		if id[0] == 'T' && id != "TXXX" {
 			id = "T"
 		}
 		fc, ok := frameCodecs[id]
@@ -41,14 +39,8 @@ func (c *codec24) decode(t *Tag, r io.Reader) (int, error) {
 			return nn, ErrUnknownFrameType
 		}
 
-		// Get the frame's size, not including the header.
-		size, err := readSyncSafeUint32(hdrbuf[4:8])
-		if err != nil {
-			return nn, err
-		}
-
-		// Read the rest of the frame into a buffer
-		framebuf := make([]byte, size)
+		// Read the rest of the frame into a buffer.
+		framebuf := make([]byte, h.Size)
 		n, err = r.Read(framebuf)
 		nn += n
 		if err != nil {
@@ -56,15 +48,16 @@ func (c *codec24) decode(t *Tag, r io.Reader) (int, error) {
 		}
 
 		// Decode the contents of the buffer, generating a frame.
-		f, err := fc.decode(bytes.NewBuffer(append(hdrbuf, framebuf...)))
+		f, err := fc.decode(&h, framebuf)
 		if err != nil {
 			return nn, err
 		}
+		*f.Header() = h
 
 		// Add to the tag's list of frames.
 		t.Frames = append(t.Frames, f)
 
-		remain -= size + 10
+		remain -= h.Size + 10
 	}
 
 	return nn, nil
@@ -76,7 +69,7 @@ func (c *codec24) encode(t *Tag, w io.Writer) (int, error) {
 	for _, f := range t.Frames {
 		// Select a frame codec based on the frame's ID value.
 		id := f.ID()
-		if id[0] == 'T' {
+		if id[0] == 'T' && id != "TXXX" {
 			id = "T"
 		}
 		fc, ok := frameCodecs[id]
@@ -84,15 +77,26 @@ func (c *codec24) encode(t *Tag, w io.Writer) (int, error) {
 			return nn, ErrUnknownFrameType
 		}
 
-		// Encode the frame into a new buffer.
-		buf := bytes.NewBuffer([]byte{})
-		err := fc.encode(f, buf)
+		// Encode the frame data (not including the header) into a new buffer.
+		buf, err := fc.encode(f)
 		if err != nil {
 			return nn, err
 		}
 
-		// Write the buffer to the output.
-		n, err := w.Write(buf.Bytes())
+		// Update the frame header's size based on the contents of the
+		// buffer.
+		h := *f.Header()
+		h.Size = uint32(len(buf)) + h.ExtraBytes()
+
+		// Write the updated frame header to the output.
+		n, err := encodeFrameHeader24(&h, w)
+		nn += n
+		if err != nil {
+			return nn, err
+		}
+
+		// Write the frame data buffer to the output.
+		n, err = w.Write(buf)
 		nn += n
 		if err != nil {
 			return nn, err
@@ -109,6 +113,7 @@ func (c *codec24) encode(t *Tag, w io.Writer) (int, error) {
 func decodeFrameHeader24(h *FrameHeader, r io.Reader) (int, error) {
 	nn := 0
 
+	// Read the 10-byte frame header.
 	buf := make([]byte, 10)
 	n, err := r.Read(buf)
 	nn += n
@@ -116,13 +121,18 @@ func decodeFrameHeader24(h *FrameHeader, r io.Reader) (int, error) {
 		return nn, err
 	}
 
+	// Process the header ID and size.
 	h.IDvalue = string(buf[0:4])
 	h.Size, err = readSyncSafeUint32(buf[4:8])
-	h.Flags = 0
 	if err != nil {
 		return n, err
 	}
+	if h.Size < 1 {
+		return n, ErrInvalidFrameHeader
+	}
 
+	// Process header flags and load additional data if necessary.
+	h.Flags = 0
 	flags := binary.BigEndian.Uint16(buf[8:10])
 	if flags != 0 {
 		if (flags & (1 << 14)) != 0 {
@@ -166,13 +176,13 @@ func decodeFrameHeader24(h *FrameHeader, r io.Reader) (int, error) {
 				return nn, err
 			}
 		}
-	}
 
-	// If the frame is compressed or encrypted, it must include a data length
-	// indicator.
-	if (h.Flags&(FrameFlagCompressed|FrameFlagEncrypted)) != 0 &&
-		(h.Flags&FrameFlagHasDataLength) == 0 {
-		return nn, ErrInvalidFrameFlags
+		// If the frame is compressed or encrypted, it must include a data
+		// length indicator.
+		if (h.Flags&(FrameFlagCompressed|FrameFlagEncrypted)) != 0 &&
+			(h.Flags&FrameFlagHasDataLength) == 0 {
+			return nn, ErrInvalidFrameFlags
+		}
 	}
 
 	return nn, nil
@@ -181,6 +191,7 @@ func decodeFrameHeader24(h *FrameHeader, r io.Reader) (int, error) {
 func encodeFrameHeader24(h *FrameHeader, w io.Writer) (int, error) {
 	nn := 0
 
+	// Write the frame ID.
 	idval := []byte(h.IDvalue)
 	n, err := w.Write(idval)
 	nn += n
@@ -188,6 +199,8 @@ func encodeFrameHeader24(h *FrameHeader, w io.Writer) (int, error) {
 		return nn, err
 	}
 
+	// Create a 6-byte buffer for the rest of the header and store the
+	// frame size in it.
 	buf := make([]byte, 6)
 	err = writeSyncSafeUint32(buf[0:4], h.Size)
 	if err != nil {
@@ -265,24 +278,15 @@ func encodeFrameHeader24(h *FrameHeader, w io.Writer) (int, error) {
 
 type frameText24 struct{}
 
-func (c *frameText24) decode(buf *bytes.Buffer) (Frame, error) {
+func (c *frameText24) decode(h *FrameHeader, buf []byte) (Frame, error) {
 	f := NewFrameText("")
 
-	_, err := decodeFrameHeader24(&f.FrameHeader, buf)
-	if err != nil {
-		return nil, err
-	}
+	f.Encoding = Encoding(buf[0])
 
-	enc, err := buf.ReadByte()
-	if err != nil {
-		return nil, err
-	}
-	if enc < 0 || enc > 4 {
-		return nil, ErrInvalidEncoding
-	}
-	f.Encoding = Encoding(enc)
-
-	_, f.Text, err = readEncodedString(buf, buf.Len(), f.Encoding)
+	// TODO: Fix readEncodedString (from a []byte)
+	btmp := bytes.NewBuffer(buf[1:])
+	var err error
+	_, f.Text, err = readEncodedString(btmp, btmp.Len(), f.Encoding)
 	if err != nil {
 		return nil, err
 	}
@@ -290,27 +294,19 @@ func (c *frameText24) decode(buf *bytes.Buffer) (Frame, error) {
 	return f, nil
 }
 
-func (c *frameText24) encode(frame Frame, buf *bytes.Buffer) error {
+func (c *frameText24) encode(frame Frame) ([]byte, error) {
 	f := frame.(*FrameText)
 
-	tmp := bytes.NewBuffer([]byte{})
-	err := tmp.WriteByte(byte(f.Encoding))
+	tmpbuf := bytes.NewBuffer([]byte{})
+	err := tmpbuf.WriteByte(byte(f.Encoding))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	_, err = writeEncodedString(tmp, f.Text, f.Encoding)
+	_, err = writeEncodedString(tmpbuf, f.Text, f.Encoding)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	f.FrameHeader.Size = uint32(len(tmp.Bytes()))
-
-	_, err = encodeFrameHeader24(&f.FrameHeader, buf)
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(buf, tmp)
-	return err
+	return tmpbuf.Bytes(), nil
 }

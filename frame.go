@@ -1,15 +1,14 @@
 package id3
 
-import (
-	"bytes"
-)
-
 // A Frame is a piece of an ID3 tag that contains information about the
 // MP3 file.
 type Frame interface {
 	// ID returns the 3- or 4-character string representing the type of
 	// frame.
 	ID() string
+
+	// Header returns a pointer to the frame's header.
+	Header() *FrameHeader
 }
 
 // A FrameHeader holds data common to all ID3 frames.
@@ -19,6 +18,19 @@ type FrameHeader struct {
 	Flags      uint8  // See FrameFlag*
 	GroupID    uint8  // Optional group identifier
 	DataLength uint32 // Optional data length (if FrameFlagHasDataLength is set)
+}
+
+// ExtraBytes returns the number of additional bytes required to store the
+// header's extended fields.
+func (h *FrameHeader) ExtraBytes() uint32 {
+	var n uint32
+	if (h.Flags & FrameFlagHasGroupInfo) != 0 {
+		n++
+	}
+	if (h.Flags & FrameFlagHasDataLength) != 0 {
+		n += 4
+	}
+	return n
 }
 
 // Possible values of flags stored per frame.
@@ -75,8 +87,8 @@ const (
 
 // A codec used to encode/decode a particular type of frame.
 type frameCodec interface {
-	decode(buf *bytes.Buffer) (Frame, error)
-	encode(frame Frame, buf *bytes.Buffer) error
+	decode(h *FrameHeader, buf []byte) (Frame, error)
+	encode(frame Frame) ([]byte, error)
 }
 
 //
@@ -91,6 +103,10 @@ type FrameText struct {
 
 func (f *FrameText) ID() string {
 	return f.FrameHeader.IDvalue
+}
+
+func (f *FrameText) Header() *FrameHeader {
+	return &f.FrameHeader
 }
 
 func NewFrameText(id string) *FrameText {
