@@ -34,35 +34,51 @@ type EncodedText struct {
 
 // Decode a byte buffer containing zero or more encoded, null-terminated
 // strings.
-func (s *EncodedText) Decode(buf []byte) error {
+func (t *EncodedText) Decode(buf []byte) error {
 	if len(buf) < 1 || buf[0] > 3 {
 		return ErrInvalidEncodedString
 	}
 
 	var err error
-	s.Encoding = Encoding(buf[0])
-	s.Strings, err = decodeStrings(buf[1:], s.Encoding)
+	t.Encoding = Encoding(buf[0])
+
+	b := buf[1:]
+	t.Strings = make([]string, 0, 1)
+	for len(b) > 0 {
+		var s string
+		var c int
+		s, c, err = decodeStringHelper(b, t.Encoding)
+		if err != nil {
+			break
+		}
+		t.Strings = append(t.Strings, s)
+		b = b[c:]
+	}
+
 	return err
+}
+
+// Encode an array of text strings into a byte slice.
+func (t *EncodedText) Encode() ([]byte, error) {
+	buf := make([]byte, 0)
+	buf = append(buf, byte(t.Encoding))
+	for i, s := range t.Strings {
+		b, err := encodeString(s, t.Encoding)
+		if err != nil {
+			return nil, err
+		}
+		if i > 0 {
+			buf = append(buf, null[t.Encoding]...)
+		}
+		buf = append(buf, b...)
+	}
+	return buf, nil
 }
 
 // Decode a string stored in a byte slice.
 func decodeString(b []byte, enc Encoding) (string, error) {
 	s, _, err := decodeStringHelper(b, enc)
 	return s, err
-}
-
-// Decode one or more null-terminated strings stored in a byte slice.
-func decodeStrings(b []byte, enc Encoding) ([]string, error) {
-	ss := make([]string, 0, 1)
-	for len(b) > 0 {
-		s, c, err := decodeStringHelper(b, enc)
-		if err != nil {
-			return nil, err
-		}
-		ss = append(ss, s)
-		b = b[c:]
-	}
-	return ss, nil
 }
 
 func decodeStringHelper(b []byte, enc Encoding) (s string, consumed int, err error) {
@@ -158,21 +174,4 @@ func encodeString(s string, enc Encoding) ([]byte, error) {
 	default:
 		return nil, ErrBadText
 	}
-}
-
-// Encode an array of stings to a byte slice. Separate multiple strings
-// by appropriate null terminators.
-func encodeStrings(ss []string, enc Encoding) ([]byte, error) {
-	buf := make([]byte, 0)
-	for i, s := range ss {
-		b, err := encodeString(s, enc)
-		if err != nil {
-			return nil, err
-		}
-		if i > 0 {
-			buf = append(buf, null[enc]...)
-		}
-		buf = append(buf, b...)
-	}
-	return buf, nil
 }

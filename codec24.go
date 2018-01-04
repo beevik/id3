@@ -307,10 +307,7 @@ func (c *frameCodecText24) decode(h *FrameHeader, buf []byte) (FrameData, error)
 	}
 
 	f := &FrameDataText{}
-	f.Encoding = Encoding(buf[0])
-
-	var err error
-	f.Text, err = decodeString(buf[1:], f.Encoding)
+	err := f.Text.Decode(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -319,15 +316,6 @@ func (c *frameCodecText24) decode(h *FrameHeader, buf []byte) (FrameData, error)
 }
 
 func (c *frameCodecText24) encode(h *FrameHeader, d FrameData) ([]byte, error) {
-	t := d.(*FrameDataText)
-
-	buf := make([]byte, 0, len(t.Text)+1)
-	buf = append(buf, byte(t.Encoding))
-
-	b, err := encodeString(t.Text, t.Encoding)
-	if err != nil {
-		return nil, err
-	}
-
-	return append(buf, b...), nil
+	f := d.(*FrameDataText)
+	return f.Text.Encode()
 }

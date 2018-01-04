@@ -69,8 +69,7 @@ type frameCodec interface {
 //
 
 type FrameDataText struct {
-	Encoding Encoding
-	Text     string
+	Text EncodedText
 }
 
 //

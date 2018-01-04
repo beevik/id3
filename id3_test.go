@@ -332,50 +332,50 @@ func TestStringDecode(t *testing.T) {
 	}
 }
 
-func TestEncodeStrings(t *testing.T) {
-	var enc = []Encoding{
-		EncodingISO88591,
-		EncodingUTF8,
-		EncodingUTF16,
-		EncodingUTF16BOM,
-	}
-	var text = [][]string{
-		{},
-		{"foo"},
-		{"foo", "bar", "xyz"},
-		{"a", "b", "c", "d", "e", "f"},
-	}
+// func TestEncodeStrings(t *testing.T) {
+// 	var enc = []Encoding{
+// 		EncodingISO88591,
+// 		EncodingUTF8,
+// 		EncodingUTF16,
+// 		EncodingUTF16BOM,
+// 	}
+// 	var text = [][]string{
+// 		{},
+// 		{"foo"},
+// 		{"foo", "bar", "xyz"},
+// 		{"a", "b", "c", "d", "e", "f"},
+// 	}
 
-	for i, e := range enc {
-		for _, tt := range text {
-			ss1 := tt
-			b, err := encodeStrings(ss1, e)
-			if err != nil {
-				t.Error(err)
-			}
+// 	for i, e := range enc {
+// 		for _, tt := range text {
+// 			ss1 := tt
+// 			b, err := encodeStrings(ss1, e)
+// 			if err != nil {
+// 				t.Error(err)
+// 			}
 
-			ss2, err := decodeStrings(b, e)
-			if err != nil {
-				t.Error(err)
-			}
+// 			ss2, err := decodeStrings(b, e)
+// 			if err != nil {
+// 				t.Error(err)
+// 			}
 
-			equal := true
-			if len(ss1) != len(ss2) {
-				equal = false
-			} else {
-				for i := 0; i < len(ss1); i++ {
-					if ss1[i] != ss2[i] {
-						equal = false
-						break
-					}
-				}
-			}
-			if !equal {
-				t.Errorf("case %d:\n  mismatch. Expected '%v', got '%v'\n", i, ss1, ss2)
-			}
-		}
-	}
-}
+// 			equal := true
+// 			if len(ss1) != len(ss2) {
+// 				equal = false
+// 			} else {
+// 				for i := 0; i < len(ss1); i++ {
+// 					if ss1[i] != ss2[i] {
+// 						equal = false
+// 						break
+// 					}
+// 				}
+// 			}
+// 			if !equal {
+// 				t.Errorf("case %d:\n  mismatch. Expected '%v', got '%v'\n", i, ss1, ss2)
+// 			}
+// 		}
+// 	}
+// }
 
 func TestFrame(t *testing.T) {
 	inbuf := []byte{
