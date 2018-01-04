@@ -1,11 +1,13 @@
 package id3
 
-type FrameData interface {
+// A Frame represents an ID3 tag frame's header and payload.
+type Frame struct {
+	Header  FrameHeader
+	Payload FramePayload
 }
 
-type Frame struct {
-	Header FrameHeader
-	Data   FrameData
+// FramePayload represents the payload of an ID3 tag frame.
+type FramePayload interface {
 }
 
 // A FrameHeader holds data common to all ID3 frames.
@@ -59,24 +61,16 @@ const (
 )
 
 // A codec used to encode/decode a particular type of frame.
-type frameCodec interface {
-	decode(h *FrameHeader, buf []byte) (FrameData, error)
-	encode(h *FrameHeader, d FrameData) ([]byte, error)
+type payloadCodec interface {
+	decode(h *FrameHeader, buf []byte) (FramePayload, error)
+	encode(h *FrameHeader, d FramePayload) ([]byte, error)
 }
 
-//
-// FrameText
-//
-
-type FrameDataText struct {
+type FramePayloadText struct {
 	Text EncodedText
 }
 
-//
-// FrameDataAPIC
-//
-
-type FrameDataAPIC struct {
+type FramePayloadAPIC struct {
 	Encoding    Encoding
 	MimeType    string
 	Type        PictureType

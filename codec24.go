@@ -12,8 +12,8 @@ import (
 type codec24 struct {
 }
 
-var frameCodecs = map[string]frameCodec{
-	"T": &frameCodecText24{},
+var payloadCodecs24 = map[string]payloadCodec{
+	"T": &payloadCodecText24{},
 }
 
 func (c *codec24) decode(t *Tag, r io.Reader) (int, error) {
@@ -35,7 +35,7 @@ func (c *codec24) decode(t *Tag, r io.Reader) (int, error) {
 		if id[0] == 'T' && id != "TXXX" {
 			id = "T"
 		}
-		fc, ok := frameCodecs[id]
+		fc, ok := payloadCodecs24[id]
 		if !ok {
 			return nn, ErrUnknownFrameType
 		}
@@ -49,7 +49,7 @@ func (c *codec24) decode(t *Tag, r io.Reader) (int, error) {
 		}
 
 		// Decode the contents of the buffer, generating the frame data.
-		f.Data, err = fc.decode(&f.Header, databuf)
+		f.Payload, err = fc.decode(&f.Header, databuf)
 		if err != nil {
 			return nn, err
 		}
@@ -72,14 +72,14 @@ func (c *codec24) encode(t *Tag, w io.Writer) (int, error) {
 		if id[0] == 'T' && id != "TXXX" {
 			id = "T"
 		}
-		fc, ok := frameCodecs[id]
+		fc, ok := payloadCodecs24[id]
 		if !ok {
 			return nn, ErrUnknownFrameType
 		}
 
 		// Encode the frame data (not including the header) into a
 		// new payload buffer.
-		buf, err := fc.encode(&f.Header, f.Data)
+		buf, err := fc.encode(&f.Header, f.Payload)
 		if err != nil {
 			return nn, err
 		}
@@ -296,17 +296,17 @@ func extraBytes24(h *FrameHeader) uint32 {
 }
 
 //
-// frameCodecText24: v2.4 Text frame codec
+// payloadCodecText24: v2.4 text payload codec
 //
 
-type frameCodecText24 struct{}
+type payloadCodecText24 struct{}
 
-func (c *frameCodecText24) decode(h *FrameHeader, buf []byte) (FrameData, error) {
+func (c *payloadCodecText24) decode(h *FrameHeader, buf []byte) (FramePayload, error) {
 	if buf[0] > 3 {
 		return nil, ErrInvalidEncoding
 	}
 
-	f := &FrameDataText{}
+	f := &FramePayloadText{}
 	err := f.Text.Decode(buf)
 	if err != nil {
 		return nil, err
@@ -315,7 +315,7 @@ func (c *frameCodecText24) decode(h *FrameHeader, buf []byte) (FrameData, error)
 	return f, nil
 }
 
-func (c *frameCodecText24) encode(h *FrameHeader, d FrameData) ([]byte, error) {
-	f := d.(*FrameDataText)
+func (c *payloadCodecText24) encode(h *FrameHeader, d FramePayload) ([]byte, error) {
+	f := d.(*FramePayloadText)
 	return f.Text.Encode()
 }
