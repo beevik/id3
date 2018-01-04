@@ -74,12 +74,25 @@ func decodeStringHelper(b []byte, enc Encoding) (s string, consumed int, err err
 		runes := make([]rune, 0, len(b))
 		for i, c := range b {
 			if c == 0 {
-				consumed = i
+				consumed = i + 1
 				break
 			}
 			runes = append(runes, rune(c))
 		}
 		return string(runes), consumed, nil
+
+	case EncodingUTF8:
+		for i := 0; i < len(b); i++ {
+			if b[i] == 0 {
+				b = b[:i]
+				consumed = i + 1
+				break
+			}
+		}
+		if !utf8.Valid(b) {
+			return "", 0, ErrBadText
+		}
+		return string(b), consumed, nil
 
 	case EncodingUTF16BOM:
 		fallthrough
@@ -97,26 +110,13 @@ func decodeStringHelper(b []byte, enc Encoding) (s string, consumed int, err err
 		for i := start; i < len(b); i += 2 {
 			cp := uint16(b[i])<<8 | uint16(b[i+1])
 			if cp == 0 {
-				consumed = i + 1
+				consumed = i + 2
 				break
 			}
 			u = append(u, cp)
 			j++
 		}
 		return string(utf16.Decode(u)), consumed, nil
-
-	case EncodingUTF8:
-		for i := 0; i < len(b); i++ {
-			if b[i] == 0 {
-				b = b[:i]
-				consumed = i
-				break
-			}
-		}
-		if !utf8.Valid(b) {
-			return "", 0, ErrBadText
-		}
-		return string(b), consumed, nil
 
 	default:
 		return "", 0, ErrBadText
@@ -138,20 +138,23 @@ func encodeString(s string, enc Encoding) ([]byte, error) {
 		}
 		return b, nil
 
+	case EncodingUTF8:
+		return []byte(s), nil
+
 	case EncodingUTF16BOM:
 		b = make([]byte, 0, len(s)*2)
 		b = append(b, []byte{0xfe, 0xff}...)
 		fallthrough
 
 	case EncodingUTF16:
+		if b == nil {
+			b = make([]byte, 0, len(s)*2)
+		}
 		u := utf16.Encode([]rune(s))
 		for i, j := 0, 0; i < len(u); i, j = i+1, j+2 {
 			b = append(b, []byte{byte(u[i] >> 8), byte(u[i])}...)
 		}
 		return b, nil
-
-	case EncodingUTF8:
-		return []byte(s), nil
 
 	default:
 		return nil, ErrBadText
