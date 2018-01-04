@@ -1,14 +1,11 @@
 package id3
 
-// A Frame is a piece of an ID3 tag that contains information about the
-// MP3 file.
-type Frame interface {
-	// ID returns the 3- or 4-character string representing the type of
-	// frame.
-	ID() string
+type FrameData interface {
+}
 
-	// Header returns a pointer to the frame's header.
-	Header() *FrameHeader
+type Frame struct {
+	Header FrameHeader
+	Data   FrameData
 }
 
 // A FrameHeader holds data common to all ID3 frames.
@@ -87,49 +84,27 @@ const (
 
 // A codec used to encode/decode a particular type of frame.
 type frameCodec interface {
-	decode(h *FrameHeader, buf []byte) (Frame, error)
-	encode(frame Frame) ([]byte, error)
+	decode(h *FrameHeader, buf []byte) (FrameData, error)
+	encode(h *FrameHeader, d FrameData) ([]byte, error)
 }
 
 //
 // FrameText
 //
 
-type FrameText struct {
-	FrameHeader
+type FrameDataText struct {
 	Encoding Encoding
 	Text     string
 }
 
-func (f *FrameText) ID() string {
-	return f.FrameHeader.IDvalue
-}
-
-func (f *FrameText) Header() *FrameHeader {
-	return &f.FrameHeader
-}
-
-func NewFrameText(id string) *FrameText {
-	return &FrameText{
-		FrameHeader{id, 1, 0, 0, 0},
-		EncodingUTF8,
-		"",
-	}
-}
-
 //
-// FrameAPIC
+// FrameDataAPIC
 //
 
-type FrameAPIC struct {
-	FrameHeader
+type FrameDataAPIC struct {
 	Encoding    Encoding
 	MimeType    string
 	Type        PictureType
 	Description string
 	Data        []byte
-}
-
-func (f *FrameAPIC) ID() string {
-	return "APIC"
 }
