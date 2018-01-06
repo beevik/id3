@@ -25,63 +25,31 @@ var null = [4][]byte{
 	[]byte{0},    // EncodingUTF8
 }
 
-// EncodedText represents an array of zero or more text strings serialized
-// using one of the four available text encodings.
-type EncodedText struct {
-	Encoding Encoding
-	Strings  []string
-}
-
-// Decode a byte buffer containing zero or more encoded, null-terminated
-// strings.
-func (t *EncodedText) Decode(buf []byte) error {
-	if len(buf) < 1 || buf[0] > 3 {
-		return ErrInvalidEncodedString
-	}
-
-	var err error
-	t.Encoding = Encoding(buf[0])
-
-	b := buf[1:]
-	t.Strings = make([]string, 0, 1)
-	for len(b) > 0 {
-		var s string
-		var c int
-		s, c, err = decodeStringHelper(b, t.Encoding)
-		if err != nil {
-			break
-		}
-		t.Strings = append(t.Strings, s)
-		b = b[c:]
-	}
-
-	return err
-}
-
-// Encode an array of text strings into a byte slice.
-func (t *EncodedText) Encode() ([]byte, error) {
-	buf := make([]byte, 0)
-	buf = append(buf, byte(t.Encoding))
-	for i, s := range t.Strings {
-		b, err := encodeString(s, t.Encoding)
-		if err != nil {
-			return nil, err
-		}
-		if i > 0 {
-			buf = append(buf, null[t.Encoding]...)
-		}
-		buf = append(buf, b...)
-	}
-	return buf, nil
-}
-
-// Decode a string stored in a byte slice.
+// Decode an encoded string stored in a byte slice.
 func decodeString(b []byte, enc Encoding) (string, error) {
-	s, _, err := decodeStringHelper(b, enc)
+	s, _, err := decodeNextString(b, enc)
 	return s, err
 }
 
-func decodeStringHelper(b []byte, enc Encoding) (s string, consumed int, err error) {
+// Decode zero or more null-terminated, encoded strings stored in a byte
+// slice.
+func decodeStrings(b []byte, enc Encoding) ([]string, error) {
+	ss := make([]string, 0, 1)
+	for len(b) > 0 {
+		s, c, err := decodeNextString(b, enc)
+		if err != nil {
+			return nil, err
+		}
+		ss = append(ss, s)
+		b = b[c:]
+	}
+
+	return ss, nil
+}
+
+// Decode the next string contained in the byte slice. Stop decoding once
+// the byte slice is exhausted or when a null terminator is reached.
+func decodeNextString(b []byte, enc Encoding) (s string, consumed int, err error) {
 	consumed = len(b)
 
 	switch enc {
@@ -174,4 +142,20 @@ func encodeString(s string, enc Encoding) ([]byte, error) {
 	default:
 		return nil, ErrBadText
 	}
+}
+
+// Encode an array of strings into a byte slice.
+func encodeStrings(ss []string, enc Encoding) ([]byte, error) {
+	buf := make([]byte, 0)
+	for i, s := range ss {
+		b, err := encodeString(s, enc)
+		if err != nil {
+			return nil, err
+		}
+		if i > 0 {
+			buf = append(buf, null[enc]...)
+		}
+		buf = append(buf, b...)
+	}
+	return buf, nil
 }

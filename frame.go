@@ -6,10 +6,6 @@ type Frame struct {
 	Payload FramePayload
 }
 
-// FramePayload represents the payload of an ID3 tag frame.
-type FramePayload interface {
-}
-
 // A FrameHeader holds data common to all ID3 frames.
 type FrameHeader struct {
 	ID            string // Frame ID string
@@ -61,15 +57,23 @@ const (
 )
 
 // A codec used to encode/decode a particular type of frame.
-type payloadCodec interface {
+type frameCodec interface {
 	decode(h *FrameHeader, buf []byte) (FramePayload, error)
 	encode(h *FrameHeader, d FramePayload) ([]byte, error)
 }
 
-type FramePayloadText struct {
-	Text EncodedText
+// FramePayload represents the payload of an ID3 tag frame.
+type FramePayload interface {
 }
 
+// FramePayloadText may contain the payload of any type of text frame
+// except for a user-defined TXXX text frame.
+type FramePayloadText struct {
+	Encoding Encoding
+	Text     []string
+}
+
+// FramePayloadAPIC contains the payload of an image frame.
 type FramePayloadAPIC struct {
 	Encoding    Encoding
 	MimeType    string
