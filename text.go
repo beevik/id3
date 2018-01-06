@@ -36,12 +36,13 @@ func decodeString(b []byte, enc Encoding) (string, error) {
 func decodeStrings(b []byte, enc Encoding) ([]string, error) {
 	ss := make([]string, 0, 1)
 	for len(b) > 0 {
-		s, c, err := decodeNextString(b, enc)
+		var s string
+		var err error
+		s, b, err = decodeNextString(b, enc)
 		if err != nil {
 			return nil, err
 		}
 		ss = append(ss, s)
-		b = b[c:]
 	}
 
 	return ss, nil
@@ -49,8 +50,9 @@ func decodeStrings(b []byte, enc Encoding) ([]string, error) {
 
 // Decode the next string contained in the byte slice. Stop decoding once
 // the byte slice is exhausted or when a null terminator is reached.
-func decodeNextString(b []byte, enc Encoding) (s string, consumed int, err error) {
-	consumed = len(b)
+// Return the decoded string and the unprocessed remainder of the byte slice.
+func decodeNextString(b []byte, enc Encoding) (s string, remain []byte, err error) {
+	consumed := len(b)
 
 	switch enc {
 	case EncodingISO88591:
@@ -62,20 +64,21 @@ func decodeNextString(b []byte, enc Encoding) (s string, consumed int, err error
 			}
 			runes = append(runes, rune(c))
 		}
-		return string(runes), consumed, nil
+		return string(runes), b[consumed:], nil
 
 	case EncodingUTF8:
+		ns := b
 		for i := 0; i < len(b); i++ {
 			if b[i] == 0 {
-				b = b[:i]
+				ns = b[:i]
 				consumed = i + 1
 				break
 			}
 		}
-		if !utf8.Valid(b) {
-			return "", 0, ErrBadText
+		if !utf8.Valid(ns) {
+			return "", b, ErrBadText
 		}
-		return string(b), consumed, nil
+		return string(ns), b[consumed:], nil
 
 	case EncodingUTF16BOM:
 		fallthrough
@@ -86,7 +89,7 @@ func decodeNextString(b []byte, enc Encoding) (s string, consumed int, err error
 			start = 2
 		}
 		if (len(b) & 1) != 0 {
-			return "", 0, ErrBadText
+			return "", b, ErrBadText
 		}
 		u := make([]uint16, 0, len(b)/2)
 		j := 0
@@ -99,10 +102,10 @@ func decodeNextString(b []byte, enc Encoding) (s string, consumed int, err error
 			u = append(u, cp)
 			j++
 		}
-		return string(utf16.Decode(u)), consumed, nil
+		return string(utf16.Decode(u)), b[consumed:], nil
 
 	default:
-		return "", 0, ErrBadText
+		return "", b, ErrBadText
 	}
 }
 

@@ -347,12 +347,10 @@ func (c *frameAPIC24) decode(h *FrameHeader, b []byte) (FramePayload, error) {
 		return nil, ErrInvalidFrame
 	}
 	var err error
-	var cnt int
-	f.MimeType, cnt, err = decodeNextString(b, EncodingISO88591)
+	f.MimeType, b, err = decodeNextString(b, EncodingISO88591)
 	if err != nil {
 		return nil, err
 	}
-	b = b[cnt:]
 
 	if len(b) < 1 {
 		return nil, ErrInvalidFrame
@@ -363,12 +361,11 @@ func (c *frameAPIC24) decode(h *FrameHeader, b []byte) (FramePayload, error) {
 	if len(b) < 1 {
 		return nil, ErrInvalidFrame
 	}
-	f.Description, cnt, err = decodeNextString(b, f.Encoding)
+	f.Description, b, err = decodeNextString(b, f.Encoding)
 	if err != nil {
 		return nil, ErrInvalidFrame
 	}
 
-	b = b[cnt:]
 	f.Data = []byte(b)
 
 	return f, nil
