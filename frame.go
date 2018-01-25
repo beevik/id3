@@ -56,14 +56,14 @@ const (
 	PictureTypePublisherLogotype             = 20
 )
 
-// A codec used to encode/decode a particular type of frame.
-type frameCodec interface {
-	decode(h *FrameHeader, buf []byte) (FramePayload, error)
-	encode(h *FrameHeader, d FramePayload) ([]byte, error)
-}
-
 // FramePayload represents the payload of an ID3 tag frame.
 type FramePayload interface {
+}
+
+// FramePayloadUnknown contains the payload of any frame whose ID is
+// unknown to this package.
+type FramePayloadUnknown struct {
+	Data []byte
 }
 
 // FramePayloadText may contain the payload of any type of text frame

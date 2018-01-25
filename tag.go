@@ -76,13 +76,24 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 		return nn, err
 	}
 
-	// Instantiate a version-appropriate codec to process the data.
+	// Choose a version-appropriate codec to process the data.
 	codec := getCodec(t.Version)
 
-	// Decode the remaining data.
-	n, err = codec.decode(t, r)
-	nn += int64(n)
-	return nn, err
+	// Decode the tag's frames.
+	for remain := t.Size; remain > 0; {
+		f := Frame{}
+
+		n, err = codec.decodeFrame(&f, r)
+		nn += int64(n)
+		if err != nil {
+			return nn, err
+		}
+
+		t.Frames = append(t.Frames, f)
+		remain -= f.Header.Size + 10
+	}
+
+	return nn, nil
 }
 
 // WriteTo writes an ID3 tag to an output stream. It returns the number of
@@ -90,20 +101,26 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 	codec := getCodec(t.Version)
 
-	// Encode everything except for the tag header into a temporary buffer.
-	tmpbuf := bytes.NewBuffer([]byte{})
-	var wtmp io.Writer = tmpbuf
+	// Create a temporary buffer to hold encoded frames.
+	framebuf := bytes.NewBuffer([]byte{})
+	var wf io.Writer = framebuf
 	if (t.Flags & TagFlagUnsync) != 0 {
-		wtmp = newUnsyncWriter(wtmp)
+		wf = newUnsyncWriter(wf)
 	}
-	size, err := codec.encode(t, wtmp)
-	if err != nil {
-		return 0, err
+
+	// Encode the tag's frames into the temporary buffer.
+	var size uint32
+	for _, f := range t.Frames {
+		n, err := codec.encodeFrame(&f, wf)
+		size += uint32(n)
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	// Create a buffer holding the 10-byte header.
 	hdr := []byte{'I', 'D', '3', t.Version, 0, t.Flags, 0, 0, 0, 0}
-	err = encodeSyncSafeUint32(hdr[6:10], uint32(size))
+	err := encodeSyncSafeUint32(hdr[6:10], size)
 	if err != nil {
 		return 0, err
 	}
@@ -117,8 +134,8 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 		return nn, err
 	}
 
-	// Write the remainder of the tag to the output.
-	n, err = w.Write(tmpbuf.Bytes())
+	// Write the frames to the output.
+	n, err = w.Write(framebuf.Bytes())
 	nn += int64(n)
 	return nn, err
 }

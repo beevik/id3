@@ -3,6 +3,6 @@ package id3
 import "io"
 
 type codec interface {
-	decode(t *Tag, r io.Reader) (int, error)
-	encode(t *Tag, w io.Writer) (int, error)
+	decodeFrame(f *Frame, r io.Reader) (int, error)
+	encodeFrame(f *Frame, w io.Writer) (int, error)
 }
