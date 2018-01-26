@@ -2,7 +2,6 @@ package id3
 
 import (
 	"encoding/binary"
-	"errors"
 	"io"
 )
 
@@ -10,11 +9,11 @@ type codec23 struct {
 }
 
 func (c *codec23) decodeFrame(f *Frame, r io.Reader) (int, error) {
-	return 0, errors.New("Unimplemented")
+	return 0, ErrUnimplemented
 }
 
 func (c *codec23) encodeFrame(f *Frame, w io.Writer) (int, error) {
-	return 0, errors.New("Unimplemented")
+	return 0, ErrUnimplemented
 }
 
 func (h *FrameHeader) read23(r io.Reader) (int, error) {

@@ -1,7 +1,6 @@
 package id3
 
 import (
-	"errors"
 	"io"
 )
 
@@ -9,11 +8,11 @@ type codec22 struct {
 }
 
 func (c *codec22) decodeFrame(f *Frame, r io.Reader) (int, error) {
-	return 0, errors.New("Unimplemented")
+	return 0, ErrUnimplemented
 }
 
 func (c *codec22) encodeFrame(f *Frame, w io.Writer) (int, error) {
-	return 0, errors.New("Unimplemented")
+	return 0, ErrUnimplemented
 }
 
 func (h *FrameHeader) read22(r io.Reader) (int, error) {
