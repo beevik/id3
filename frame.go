@@ -58,23 +58,9 @@ const (
 	PictureTypePublisherLogotype             = 20
 )
 
-var (
-	fText = FramePayloadText{}
-	fTXXX = FramePayloadTXXX{}
-	fAPIC = FramePayloadAPIC{}
-	fUFID = FramePayloadUFID{}
-	fUSLT = FramePayloadUSLT{}
-	fUnkn = FramePayloadUnknown{}
-)
-
-var frameTable = map[string]reflect.Type{
-	"T":    reflect.TypeOf(fText),
-	"TXXX": reflect.TypeOf(fTXXX),
-	"APIC": reflect.TypeOf(fAPIC),
-	"UFID": reflect.TypeOf(fUFID),
-	"USLT": reflect.TypeOf(fUSLT),
-	"":     reflect.TypeOf(fUnkn),
-}
+// A GroupSymbol is a value between 0x80 and 0xF0 that uniquely identifies
+// a grouped set of frames.
+type GroupSymbol byte
 
 // FramePayload represents the payload of an ID3 tag frame.
 type FramePayload interface {
@@ -115,11 +101,52 @@ type FramePayloadUFID struct {
 	Identifier string `id3:"iso88519"`
 }
 
-// FramePayloadUSLT contains unsychornized lyrics and text transcription
+// FramePayloadUSER contains the terms of use description for the MP3.
+type FramePayloadUSER struct {
+	Encoding Encoding
+	Language string `id3:"lang"`
+	Text     string
+}
+
+// FramePayloadUSLT contains unsynchronized lyrics and text transcription
 // data.
 type FramePayloadUSLT struct {
 	Encoding   Encoding
 	Language   string `id3:"lang"`
 	Descriptor string
 	Text       string
+}
+
+// FramePayloadGRID contains information describing the grouping of
+// otherwise unrelated frames.
+type FramePayloadGRID struct {
+	Owner string `id3:"iso88519"`
+	Group GroupSymbol
+	Data  []byte
+}
+
+//
+// Frame payload reflection table
+//
+
+var (
+	fUnkn = FramePayloadUnknown{}
+	fText = FramePayloadText{}
+	fTXXX = FramePayloadTXXX{}
+	fAPIC = FramePayloadAPIC{}
+	fUFID = FramePayloadUFID{}
+	fUSER = FramePayloadUSER{}
+	fUSLT = FramePayloadUSLT{}
+	fGRID = FramePayloadGRID{}
+)
+
+var frameTable = map[string]reflect.Type{
+	"":     reflect.TypeOf(fUnkn),
+	"T___": reflect.TypeOf(fText),
+	"TXXX": reflect.TypeOf(fTXXX),
+	"APIC": reflect.TypeOf(fAPIC),
+	"UFID": reflect.TypeOf(fUFID),
+	"USER": reflect.TypeOf(fUSER),
+	"USLT": reflect.TypeOf(fUSLT),
+	"GRID": reflect.TypeOf(fGRID),
 }

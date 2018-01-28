@@ -102,7 +102,7 @@ func (p *parser24) readByteSlice(f reflect.StructField, v reflect.Value) []byte 
 	return b
 }
 
-func (p *parser24) readUint8(f reflect.StructField, v reflect.Value, max uint8) uint8 {
+func (p *parser24) readUint8(f reflect.StructField, v reflect.Value, min uint8, max uint8) uint8 {
 	var e uint8
 
 	if p.err != nil {
@@ -115,7 +115,7 @@ func (p *parser24) readUint8(f reflect.StructField, v reflect.Value, max uint8) 
 	}
 
 	e = p.buf[0]
-	if e > max {
+	if e < min || e > max {
 		p.err = ErrInvalidFrame
 		return e
 	}
@@ -142,7 +142,7 @@ func (c *codec24new) decodeFrame(f *Frame, r io.Reader) (int, error) {
 	// decode payload here
 	id := string(f.Header.ID)
 	if id[0] == 'T' {
-		id = "T"
+		id = "T___"
 	}
 	typ, ok := frameTable[id]
 	if !ok {
@@ -178,9 +178,11 @@ func (c *codec24new) decodeFrame(f *Frame, r io.Reader) (int, error) {
 		case field.Type.Kind() == reflect.Uint8:
 			switch field.Type.Name() {
 			case "Encoding":
-				enc = Encoding(parser.readUint8(field, elem.Field(i), 3))
+				enc = Encoding(parser.readUint8(field, elem.Field(i), 0, 3))
 			case "PictureType":
-				parser.readUint8(field, elem.Field(i), 20)
+				parser.readUint8(field, elem.Field(i), 0, 20)
+			case "GroupSymbol":
+				parser.readUint8(field, elem.Field(i), 0x80, 0xf0)
 			default:
 				parser.err = ErrUnknownFieldType
 			}
