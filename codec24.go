@@ -72,19 +72,16 @@ func (c *codec24) decodeFrame(f *Frame, r io.Reader) (int, error) {
 
 	// Instantiate a new frame payload using reflection.
 	v := reflect.New(typ)
-	vElem := v.Elem()
 
 	// Use the reflection type of the payload to process the frame's data.
 	enc := EncodingISO88591
-	fields := typ.NumField()
-	for i := 0; i < fields; i++ {
-		fieldValue := vElem.Field(i)
+	for i := 0; i < typ.NumField(); i++ {
+		fieldValue := v.Elem().Field(i)
 		field := typ.Field(i)
 		kind := field.Type.Kind()
 		tags := getTags(field, "id3")
-		switch {
-
-		case kind == reflect.Slice:
+		switch kind {
+		case reflect.Slice:
 			switch field.Type.Elem().Kind() {
 			case reflect.Uint8:
 				c.scanByteSlice(tags, fieldValue)
@@ -94,10 +91,10 @@ func (c *codec24) decodeFrame(f *Frame, r io.Reader) (int, error) {
 				c.err = ErrUnknownFieldType
 			}
 
-		case kind == reflect.String:
+		case reflect.String:
 			c.scanString(tags, fieldValue, enc)
 
-		case kind == reflect.Uint8:
+		case reflect.Uint8:
 			switch field.Type.Name() {
 			case "frameID":
 				// Skip
@@ -149,10 +146,48 @@ func (c *codec24) consumeBytes(n int) []byte {
 	return b
 }
 
+func (c *codec24) consumeStrings(enc Encoding) []string {
+	if c.err != nil {
+		return []string{}
+	}
+
+	var ss []string
+	ss, c.err = decodeStrings(c.buf, enc)
+	if c.err != nil {
+		return ss
+	}
+
+	c.buf = c.buf[:0]
+	return ss
+}
+
+func (c *codec24) consumeString(len int, enc Encoding) string {
+	var s string
+
+	b := c.consumeBytes(len)
+	if c.err != nil {
+		return s
+	}
+
+	s, c.err = decodeString(b, EncodingISO88591)
+	return s
+}
+
+func (c *codec24) consumeNextString(enc Encoding) string {
+	var s string
+	if c.err != nil {
+		return s
+	}
+
+	s, c.buf, c.err = decodeNextString(c.buf, enc)
+	return s
+}
+
 func (c *codec24) consumeAll() []byte {
 	if c.err != nil {
 		return []byte{}
 	}
+
 	b := c.buf
 	c.buf = c.buf[:0]
 	return b
@@ -230,7 +265,7 @@ func (c *codec24) scanFrameHeader(h *FrameHeader) {
 	}
 }
 
-func (c *codec24) scanString(tags tagMap, v reflect.Value, enc Encoding) string {
+func (c *codec24) scanString(tags tagList, v reflect.Value, enc Encoding) string {
 	var s string
 	if c.err != nil {
 		return s
@@ -241,16 +276,10 @@ func (c *codec24) scanString(tags tagMap, v reflect.Value, enc Encoding) string 
 	}
 
 	if tags.Lookup("lang") {
-		b := c.consumeBytes(3)
-		if c.err != nil {
-			c.err = ErrInvalidFrame
-			return s
-		}
-		s, _, c.err = decodeNextString(b, EncodingISO88591)
+		s = c.consumeString(3, EncodingISO88591)
 	} else {
-		s, c.buf, c.err = decodeNextString(c.buf, enc)
+		s = c.consumeNextString(enc)
 	}
-
 	if c.err != nil {
 		return s
 	}
@@ -259,22 +288,21 @@ func (c *codec24) scanString(tags tagMap, v reflect.Value, enc Encoding) string 
 	return s
 }
 
-func (c *codec24) scanStringSlice(tags tagMap, v reflect.Value, enc Encoding) []string {
+func (c *codec24) scanStringSlice(tags tagList, v reflect.Value, enc Encoding) []string {
 	var ss []string
 	if c.err != nil {
 		return ss
 	}
 
-	ss, c.err = decodeStrings(c.buf, enc)
+	ss = c.consumeStrings(enc)
 	if c.err != nil {
 		return ss
 	}
-	c.consumeAll()
 	v.Set(reflect.ValueOf(ss))
 	return ss
 }
 
-func (c *codec24) scanByteSlice(tags tagMap, v reflect.Value) []byte {
+func (c *codec24) scanByteSlice(tags tagList, v reflect.Value) []byte {
 	var b []byte
 	if c.err != nil {
 		return b
@@ -285,7 +313,7 @@ func (c *codec24) scanByteSlice(tags tagMap, v reflect.Value) []byte {
 	return b
 }
 
-func (c *codec24) scanUint8(tags tagMap, v reflect.Value, min uint8, max uint8) uint8 {
+func (c *codec24) scanUint8(tags tagList, v reflect.Value, min uint8, max uint8) uint8 {
 	var e uint8
 	if c.err != nil {
 		return e

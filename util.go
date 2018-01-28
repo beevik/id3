@@ -58,25 +58,25 @@ func writeByte(w io.Writer, b byte) error {
 	return err
 }
 
-type tagMap map[string]bool
+type tagList map[string]bool
 
-func (t tagMap) Lookup(s string) bool {
+func (t tagList) Lookup(s string) bool {
 	_, ok := t[s]
 	return ok
 }
 
-var emptyTags = make(tagMap)
+var emptyTags = make(tagList)
 
 // Return a table of all tags on a struct field.
-func getTags(f reflect.StructField, key string) tagMap {
+func getTags(f reflect.StructField, key string) tagList {
 	tag, ok := f.Tag.Lookup(key)
 	if !ok {
 		return emptyTags
 	}
 
-	m := make(tagMap)
+	l := make(tagList)
 	for _, t := range strings.Split(tag, ",") {
-		m[t] = true
+		l[t] = true
 	}
-	return m
+	return l
 }
