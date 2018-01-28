@@ -85,6 +85,15 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 
 		n, err = codec.decodeFrame(&f, r)
 		nn += int64(n)
+		if err == errPaddingEncountered {
+			pad := make([]byte, remain-4)
+			n, err = r.Read(pad)
+			nn += int64(n)
+			if err != nil {
+				return nn, err
+			}
+			break
+		}
 		if err != nil {
 			return nn, err
 		}

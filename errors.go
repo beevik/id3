@@ -20,4 +20,6 @@ var (
 	ErrInvalidFrameFlags    = errors.New("invalid frame flags")
 	ErrInvalidEncodedString = errors.New("invalid encoded string")
 	ErrUnimplemented        = errors.New("code path unimplemented")
+
+	errPaddingEncountered = errors.New("padding encountered")
 )

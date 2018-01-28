@@ -18,6 +18,7 @@ type frameCodec24 struct {
 
 var frameCodecs24 = map[string]frameCodec24{
 	"T???": {(*codec24).decodeTextFrame, (*codec24).encodeTextFrame},
+	"TXXX": {(*codec24).decodeTXXXFrame, (*codec24).encodeTXXXFrame},
 	"APIC": {(*codec24).decodeAPICFrame, (*codec24).encodeAPICFrame},
 	"":     {(*codec24).decodeUnknownFrame, (*codec24).encodeUnknownFrame},
 }
@@ -56,11 +57,21 @@ func (c *codec24) decodeFrame(f *Frame, r io.Reader) (int, error) {
 func (c *codec24) decodeFrameHeader(h *FrameHeader, r io.Reader) (int, error) {
 	nn := 0
 
-	// Read the 10-byte frame header.
+	// Read the 4-byte frame ID.
 	buf := make([]byte, 10)
-	n, err := r.Read(buf)
+	n, err := r.Read(buf[0:4])
 	nn += n
-	if n < 10 || err != nil {
+	if err != nil {
+		return nn, err
+	}
+	if buf[0] == 0 && buf[1] == 0 && buf[2] == 0 && buf[3] == 0 {
+		return nn, errPaddingEncountered
+	}
+
+	// Read the rest of the 10-byte frame header.
+	n, err = r.Read(buf[4:10])
+	nn += n
+	if err != nil {
 		return nn, err
 	}
 
@@ -147,6 +158,34 @@ func (c *codec24) decodeTextFrame(f *Frame, r io.Reader) (int, error) {
 	p.Encoding = Encoding(b[0])
 
 	p.Text, err = decodeStrings(b[1:], p.Encoding)
+	if err != nil {
+		return n, err
+	}
+
+	f.Payload = p
+	return n, nil
+}
+
+func (c *codec24) decodeTXXXFrame(f *Frame, r io.Reader) (int, error) {
+	p := &FramePayloadTXXX{}
+
+	b := make([]byte, f.Header.Size)
+	n, err := r.Read(b)
+	if err != nil {
+		return n, err
+	}
+
+	if b[0] > 3 {
+		return n, ErrInvalidEncoding
+	}
+	p.Encoding = Encoding(b[0])
+
+	p.Description, b, err = decodeNextString(b[1:], p.Encoding)
+	if err != nil {
+		return n, err
+	}
+
+	p.Text, err = decodeString(b, p.Encoding)
 	if err != nil {
 		return n, err
 	}
@@ -365,6 +404,34 @@ func (c *codec24) encodeTextFrame(f *Frame, w io.Writer) (int, error) {
 		return nn, err
 	}
 
+	n, err = w.Write(sb)
+	nn += n
+	return nn, err
+}
+
+func (c *codec24) encodeTXXXFrame(f *Frame, w io.Writer) (int, error) {
+	p := f.Payload.(*FramePayloadTXXX)
+
+	nn := 0
+
+	n, err := w.Write([]byte{byte(p.Encoding)})
+	nn += n
+	if err != nil {
+		return nn, err
+	}
+
+	sb, err := encodeString(p.Description, p.Encoding)
+	if err != nil {
+		return nn, err
+	}
+	sb = append(sb, null[p.Encoding]...)
+	n, err = w.Write(sb)
+	nn += n
+	if err != nil {
+		return nn, err
+	}
+
+	sb, err = encodeString(p.Text, p.Encoding)
 	n, err = w.Write(sb)
 	nn += n
 	return nn, err

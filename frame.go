@@ -73,6 +73,13 @@ type FramePayloadText struct {
 	Text     []string
 }
 
+// FramePayloadTXXX contains a user-defined text payload.
+type FramePayloadTXXX struct {
+	Encoding    Encoding
+	Description string
+	Text        string
+}
+
 // FramePayloadAPIC contains the payload of an image frame.
 type FramePayloadAPIC struct {
 	Encoding    Encoding
