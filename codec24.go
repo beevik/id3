@@ -20,6 +20,8 @@ var frameCodecs24 = map[string]frameCodec24{
 	"T???": {(*codec24).decodeTextFrame, (*codec24).encodeTextFrame},
 	"TXXX": {(*codec24).decodeTXXXFrame, (*codec24).encodeTXXXFrame},
 	"APIC": {(*codec24).decodeAPICFrame, (*codec24).encodeAPICFrame},
+	"USLT": {(*codec24).decodeUSLTFrame, (*codec24).encodeUSLTFrame},
+	"UFID": {(*codec24).decodeUFIDFrame, (*codec24).encodeUFIDFrame},
 	"":     {(*codec24).decodeUnknownFrame, (*codec24).encodeUnknownFrame},
 }
 
@@ -232,6 +234,63 @@ func (c *codec24) decodeAPICFrame(f *Frame, r io.Reader) (int, error) {
 	}
 
 	p.Data = []byte(b)
+
+	f.Payload = p
+	return n, nil
+}
+
+func (c *codec24) decodeUSLTFrame(f *Frame, r io.Reader) (int, error) {
+	p := &FramePayloadUSLT{}
+
+	if f.Header.Size < 4 {
+		return 0, ErrInvalidFrame
+	}
+
+	b := make([]byte, f.Header.Size)
+	n, err := r.Read(b)
+	if err != nil {
+		return n, err
+	}
+
+	if b[0] > 3 {
+		return n, ErrInvalidEncoding
+	}
+	p.Encoding = Encoding(b[0])
+
+	p.Language = string(b[1:4])
+
+	p.Descriptor, b, err = decodeNextString(b[4:], p.Encoding)
+	if err != nil {
+		return n, err
+	}
+
+	p.Text, err = decodeString(b, p.Encoding)
+	if err != nil {
+		return n, err
+	}
+
+	f.Payload = p
+	return n, nil
+}
+
+func (c *codec24) decodeUFIDFrame(f *Frame, r io.Reader) (int, error) {
+	p := &FramePayloadUFID{}
+
+	b := make([]byte, f.Header.Size)
+	n, err := r.Read(b)
+	if err != nil {
+		return n, err
+	}
+
+	p.Owner, b, err = decodeNextString(b, EncodingISO88591)
+	if err != nil {
+		return n, err
+	}
+
+	p.Identifier, err = decodeString(b, EncodingISO88591)
+	if err != nil {
+		return n, err
+	}
 
 	f.Payload = p
 	return n, nil
@@ -479,6 +538,57 @@ func (c *codec24) encodeAPICFrame(f *Frame, w io.Writer) (int, error) {
 	}
 
 	n, err = w.Write(p.Data)
+	nn += n
+	return nn, err
+}
+
+func (c *codec24) encodeUSLTFrame(f *Frame, w io.Writer) (int, error) {
+	p := f.Payload.(*FramePayloadUSLT)
+
+	nn := 0
+
+	b := []byte{byte(p.Encoding), p.Language[0], p.Language[1], p.Language[2]}
+	n, err := w.Write(b)
+	nn += n
+	if err != nil {
+		return nn, err
+	}
+
+	sb, err := encodeString(p.Descriptor, p.Encoding)
+	if err != nil {
+		return nn, err
+	}
+	sb = append(sb, null[p.Encoding]...)
+	n, err = w.Write(sb)
+	nn += n
+	if err != nil {
+		return nn, err
+	}
+
+	sb, err = encodeString(p.Text, p.Encoding)
+	n, err = w.Write(sb)
+	nn += n
+	return nn, err
+}
+
+func (c *codec24) encodeUFIDFrame(f *Frame, w io.Writer) (int, error) {
+	p := f.Payload.(*FramePayloadUFID)
+
+	nn := 0
+
+	sb, err := encodeString(p.Owner, EncodingISO88591)
+	if err != nil {
+		return nn, err
+	}
+	sb = append(sb, 0)
+	n, err := w.Write(sb)
+	nn += n
+	if err != nil {
+		return nn, err
+	}
+
+	sb, err = encodeString(p.Identifier, EncodingISO88591)
+	n, err = w.Write(sb)
 	nn += n
 	return nn, err
 }

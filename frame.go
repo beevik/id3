@@ -88,3 +88,18 @@ type FramePayloadAPIC struct {
 	Description string
 	Data        []byte
 }
+
+// FramePayloadUFID contains a unique file identifier for the MP3.
+type FramePayloadUFID struct {
+	Owner      string
+	Identifier string
+}
+
+// FramePayloadUSLT contains unsychornized lyrics and text transcription
+// data.
+type FramePayloadUSLT struct {
+	Encoding   Encoding
+	Language   string
+	Descriptor string
+	Text       string
+}
