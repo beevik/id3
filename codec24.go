@@ -4,129 +4,34 @@ import (
 	"encoding/binary"
 	"io"
 	"reflect"
-	"strings"
 )
 
-type parser24 struct {
-	buf []byte
-	err error
-	n   int
-}
-
-func newParser24(r io.Reader, size uint32) *parser24 {
-	p := &parser24{}
-	p.buf = make([]byte, int(size))
-	p.n, p.err = r.Read(p.buf)
-	return p
-}
-
-func tagContains(f reflect.StructField, s string) bool {
-	if f.Tag == "" {
-		return false
-	}
-	tag := string(f.Tag[5 : len(f.Tag)-1])
-	for _, t := range strings.Split(tag, ",") {
-		if t == s {
-			return true
-		}
-	}
-	return false
-}
-
-func (p *parser24) readString(f reflect.StructField, v reflect.Value, enc Encoding) string {
-	var s string
-
-	if p.err != nil {
-		return s
-	}
-
-	if tagContains(f, "iso88519") {
-		enc = EncodingISO88591
-	}
-
-	var b []byte
-
-	if tagContains(f, "lang") {
-		if len(p.buf) < 3 {
-			p.err = ErrInvalidFrame
-			return s
-		}
-		s, _, p.err = decodeNextString(p.buf[:3], EncodingISO88591)
-		b = p.buf[3:]
-	} else {
-		s, b, p.err = decodeNextString(p.buf, enc)
-	}
-
-	if p.err != nil {
-		return s
-	}
-
-	v.SetString(s)
-
-	p.buf = b
-	return s
-}
-
-func (p *parser24) readStringSlice(f reflect.StructField, v reflect.Value, enc Encoding) []string {
-	var ss []string
-
-	if p.err != nil {
-		return ss
-	}
-
-	ss, p.err = decodeStrings(p.buf, enc)
-	if p.err != nil {
-		return ss
-	}
-
-	slice := reflect.MakeSlice(v.Type(), len(ss), len(ss))
-	reflect.Copy(slice, reflect.ValueOf(ss))
-	v.Set(slice)
-
-	p.buf = p.buf[:0]
-	return ss
-}
-
-func (p *parser24) readByteSlice(f reflect.StructField, v reflect.Value) []byte {
-	var b []byte
-	if p.err != nil {
-		return b
-	}
-
-	b = p.buf
-	slice := reflect.MakeSlice(v.Type(), len(b), len(b))
-	reflect.Copy(slice, reflect.ValueOf(b))
-	v.Set(slice)
-
-	p.buf = p.buf[:0]
-	return b
-}
-
-func (p *parser24) readUint8(f reflect.StructField, v reflect.Value, min uint8, max uint8) uint8 {
-	var e uint8
-
-	if p.err != nil {
-		return e
-	}
-
-	if len(p.buf) < 1 {
-		p.err = ErrInvalidFrame
-		return e
-	}
-
-	e = p.buf[0]
-	if e < min || e > max {
-		p.err = ErrInvalidFrame
-		return e
-	}
-
-	v.SetUint(uint64(e))
-
-	p.buf = p.buf[1:]
-	return e
-}
+//
+// codec24
+//
 
 type codec24 struct {
+}
+
+var frameTypeTable24 = map[string]reflect.Type{
+	"????": reflect.TypeOf(FramePayloadUnknown{}),
+	"T___": reflect.TypeOf(FramePayloadText{}),
+	"TXXX": reflect.TypeOf(FramePayloadTXXX{}),
+	"APIC": reflect.TypeOf(FramePayloadAPIC{}),
+	"UFID": reflect.TypeOf(FramePayloadUFID{}),
+	"USER": reflect.TypeOf(FramePayloadUSER{}),
+	"USLT": reflect.TypeOf(FramePayloadUSLT{}),
+	"GRID": reflect.TypeOf(FramePayloadGRID{}),
+}
+
+func (c *codec24) getFramePayloadType(id string) reflect.Type {
+	if id[0] == 'T' {
+		id = "T___"
+	}
+	if typ, ok := frameTypeTable24[id]; ok {
+		return typ
+	}
+	return frameTypeTable24["????"]
 }
 
 func (c *codec24) decodeFrame(f *Frame, r io.Reader) (int, error) {
@@ -139,50 +44,46 @@ func (c *codec24) decodeFrame(f *Frame, r io.Reader) (int, error) {
 		return nn, err
 	}
 
-	// decode payload here
-	id := string(f.Header.ID)
-	if id[0] == 'T' {
-		id = "T___"
-	}
-	typ, ok := frameTable[id]
-	if !ok {
-		typ = frameTable["????"]
-	}
+	// Select a frame payload type based on the ID.
+	typ := c.getFramePayloadType(f.Header.ID)
 
-	parser := newParser24(r, f.Header.Size)
+	// Instantiate a new frame payload using reflection.
 	v := reflect.New(typ)
 	elem := v.Elem()
 
-	// New returns a Value representing a pointer to a new zero value for the
-	// specified type. That is, the returned Value's Type is PtrTo(typ).
-	//v := reflect.New(typ)
+	// Create a frame payload parser.
+	parser := newParser24(r, f.Header.Size)
+
+	// Use the reflection type of the payload to process the frame's data.
 	enc := EncodingISO88591
 	fields := typ.NumField()
 	for i := 0; i < fields; i++ {
+		fieldValue := elem.Field(i)
 		field := typ.Field(i)
+		kind := field.Type.Kind()
 		switch {
 
-		case field.Type.Kind() == reflect.Slice:
+		case kind == reflect.Slice:
 			switch field.Type.Elem().Kind() {
 			case reflect.Uint8:
-				parser.readByteSlice(field, elem.Field(i))
+				parser.readByteSlice(field, fieldValue)
 			case reflect.String:
-				parser.readStringSlice(field, elem.Field(i), enc)
+				parser.readStringSlice(field, fieldValue, enc)
 			default:
 				parser.err = ErrUnknownFieldType
 			}
 
-		case field.Type.Kind() == reflect.String:
-			parser.readString(field, elem.Field(i), enc)
+		case kind == reflect.String:
+			parser.readString(field, fieldValue, enc)
 
-		case field.Type.Kind() == reflect.Uint8:
+		case kind == reflect.Uint8:
 			switch field.Type.Name() {
 			case "Encoding":
-				enc = Encoding(parser.readUint8(field, elem.Field(i), 0, 3))
+				enc = Encoding(parser.readUint8(field, fieldValue, 0, 3))
 			case "PictureType":
-				parser.readUint8(field, elem.Field(i), 0, 20)
+				parser.readUint8(field, fieldValue, 0, 20)
 			case "GroupSymbol":
-				parser.readUint8(field, elem.Field(i), 0x80, 0xf0)
+				parser.readUint8(field, fieldValue, 0x80, 0xf0)
 			default:
 				parser.err = ErrUnknownFieldType
 			}
@@ -291,4 +192,114 @@ func (c *codec24) decodeFrameHeader(h *FrameHeader, r io.Reader) (int, error) {
 
 func (c *codec24) encodeFrame(f *Frame, w io.Writer) (int, error) {
 	return 0, ErrUnimplemented
+}
+
+//
+// parser24
+//
+
+type parser24 struct {
+	buf []byte
+	err error
+	n   int
+}
+
+func newParser24(r io.Reader, size uint32) *parser24 {
+	p := &parser24{}
+	p.buf = make([]byte, int(size))
+	p.n, p.err = r.Read(p.buf)
+	return p
+}
+
+func (p *parser24) readString(f reflect.StructField, v reflect.Value, enc Encoding) string {
+	var s string
+
+	if p.err != nil {
+		return s
+	}
+
+	if tagContains(f, "iso88519") {
+		enc = EncodingISO88591
+	}
+
+	var b []byte
+
+	if tagContains(f, "lang") {
+		if len(p.buf) < 3 {
+			p.err = ErrInvalidFrame
+			return s
+		}
+		s, _, p.err = decodeNextString(p.buf[:3], EncodingISO88591)
+		b = p.buf[3:]
+	} else {
+		s, b, p.err = decodeNextString(p.buf, enc)
+	}
+
+	if p.err != nil {
+		return s
+	}
+
+	v.SetString(s)
+
+	p.buf = b
+	return s
+}
+
+func (p *parser24) readStringSlice(f reflect.StructField, v reflect.Value, enc Encoding) []string {
+	var ss []string
+
+	if p.err != nil {
+		return ss
+	}
+
+	ss, p.err = decodeStrings(p.buf, enc)
+	if p.err != nil {
+		return ss
+	}
+
+	slice := reflect.MakeSlice(v.Type(), len(ss), len(ss))
+	reflect.Copy(slice, reflect.ValueOf(ss))
+	v.Set(slice)
+
+	p.buf = p.buf[:0]
+	return ss
+}
+
+func (p *parser24) readByteSlice(f reflect.StructField, v reflect.Value) []byte {
+	var b []byte
+	if p.err != nil {
+		return b
+	}
+
+	b = p.buf
+	slice := reflect.MakeSlice(v.Type(), len(b), len(b))
+	reflect.Copy(slice, reflect.ValueOf(b))
+	v.Set(slice)
+
+	p.buf = p.buf[:0]
+	return b
+}
+
+func (p *parser24) readUint8(f reflect.StructField, v reflect.Value, min uint8, max uint8) uint8 {
+	var e uint8
+
+	if p.err != nil {
+		return e
+	}
+
+	if len(p.buf) < 1 {
+		p.err = ErrInvalidFrame
+		return e
+	}
+
+	e = p.buf[0]
+	if e < min || e > max {
+		p.err = ErrInvalidFrame
+		return e
+	}
+
+	v.SetUint(uint64(e))
+
+	p.buf = p.buf[1:]
+	return e
 }

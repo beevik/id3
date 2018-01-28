@@ -1,7 +1,5 @@
 package id3
 
-import "reflect"
-
 // A Frame represents an ID3 tag frame's header and payload.
 type Frame struct {
 	Header  FrameHeader
@@ -127,19 +125,4 @@ type FramePayloadGRID struct {
 	Owner   string `id3:"iso88519"`
 	GroupID GroupSymbol
 	Data    []byte
-}
-
-//
-// Frame payload reflection table
-//
-
-var frameTable = map[string]reflect.Type{
-	"????": reflect.TypeOf(FramePayloadUnknown{}),
-	"T___": reflect.TypeOf(FramePayloadText{}),
-	"TXXX": reflect.TypeOf(FramePayloadTXXX{}),
-	"APIC": reflect.TypeOf(FramePayloadAPIC{}),
-	"UFID": reflect.TypeOf(FramePayloadUFID{}),
-	"USER": reflect.TypeOf(FramePayloadUSER{}),
-	"USLT": reflect.TypeOf(FramePayloadUSLT{}),
-	"GRID": reflect.TypeOf(FramePayloadGRID{}),
 }

@@ -2,6 +2,8 @@ package id3
 
 import (
 	"io"
+	"reflect"
+	"strings"
 )
 
 // Decode a sync-safe uint32 from a byte slice containing 4 or 5 bytes.
@@ -54,4 +56,18 @@ func writeByte(w io.Writer, b byte) error {
 	buf[0] = b
 	_, err := w.Write(buf)
 	return err
+}
+
+// Return true if an id3 reflection tag contains a matching setting.
+func tagContains(f reflect.StructField, s string) bool {
+	if f.Tag == "" {
+		return false
+	}
+	tag := string(f.Tag[5 : len(f.Tag)-1])
+	for _, t := range strings.Split(tag, ",") {
+		if t == s {
+			return true
+		}
+	}
+	return false
 }
