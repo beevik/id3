@@ -1,41 +1,132 @@
 package id3
 
 import (
-	"bytes"
 	"encoding/binary"
 	"io"
+	"reflect"
+	"strings"
 )
 
-// ID3 v2.4 codec
+type parser24 struct {
+	buf []byte
+	err error
+	n   int
+}
+
+func newParser24(r io.Reader, size uint32) *parser24 {
+	p := &parser24{}
+	p.buf = make([]byte, int(size))
+	p.n, p.err = r.Read(p.buf)
+	return p
+}
+
+func tagContains(f reflect.StructField, s string) bool {
+	if f.Tag == "" {
+		return false
+	}
+	tag := string(f.Tag[5 : len(f.Tag)-1])
+	for _, t := range strings.Split(tag, ",") {
+		if t == s {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *parser24) readString(f reflect.StructField, v reflect.Value, enc Encoding) string {
+	var s string
+
+	if p.err != nil {
+		return s
+	}
+
+	if tagContains(f, "iso88519") {
+		enc = EncodingISO88591
+	}
+
+	var b []byte
+
+	if tagContains(f, "lang") {
+		if len(p.buf) < 3 {
+			p.err = ErrInvalidFrame
+			return s
+		}
+		s, _, p.err = decodeNextString(p.buf[:3], EncodingISO88591)
+		b = p.buf[3:]
+	} else {
+		s, b, p.err = decodeNextString(p.buf, enc)
+	}
+
+	if p.err != nil {
+		return s
+	}
+
+	v.SetString(s)
+
+	p.buf = b
+	return s
+}
+
+func (p *parser24) readStringSlice(f reflect.StructField, v reflect.Value, enc Encoding) []string {
+	var ss []string
+
+	if p.err != nil {
+		return ss
+	}
+
+	ss, p.err = decodeStrings(p.buf, enc)
+	if p.err != nil {
+		return ss
+	}
+
+	slice := reflect.MakeSlice(v.Type(), len(ss), len(ss))
+	reflect.Copy(slice, reflect.ValueOf(ss))
+	v.Set(slice)
+
+	p.buf = p.buf[:0]
+	return ss
+}
+
+func (p *parser24) readByteSlice(f reflect.StructField, v reflect.Value) []byte {
+	var b []byte
+	if p.err != nil {
+		return b
+	}
+
+	b = p.buf
+	slice := reflect.MakeSlice(v.Type(), len(b), len(b))
+	reflect.Copy(slice, reflect.ValueOf(b))
+	v.Set(slice)
+
+	p.buf = p.buf[:0]
+	return b
+}
+
+func (p *parser24) readUint8(f reflect.StructField, v reflect.Value, min uint8, max uint8) uint8 {
+	var e uint8
+
+	if p.err != nil {
+		return e
+	}
+
+	if len(p.buf) < 1 {
+		p.err = ErrInvalidFrame
+		return e
+	}
+
+	e = p.buf[0]
+	if e < min || e > max {
+		p.err = ErrInvalidFrame
+		return e
+	}
+
+	v.SetUint(uint64(e))
+
+	p.buf = p.buf[1:]
+	return e
+}
+
 type codec24 struct {
-}
-
-// Per-frame codecs for v2.4
-type frameCodec24 struct {
-	decodePayload func(c *codec24, f *Frame, r io.Reader) (int, error)
-	encodePayload func(c *codec24, f *Frame, w io.Writer) (int, error)
-}
-
-var frameCodecs24 = map[string]frameCodec24{
-	"T???": {(*codec24).decodeTextFrame, (*codec24).encodeTextFrame},
-	"TXXX": {(*codec24).decodeTXXXFrame, (*codec24).encodeTXXXFrame},
-	"APIC": {(*codec24).decodeAPICFrame, (*codec24).encodeAPICFrame},
-	"USLT": {(*codec24).decodeUSLTFrame, (*codec24).encodeUSLTFrame},
-	"UFID": {(*codec24).decodeUFIDFrame, (*codec24).encodeUFIDFrame},
-	"":     {(*codec24).decodeUnknownFrame, (*codec24).encodeUnknownFrame},
-}
-
-func getFrameCodec24(id string) frameCodec24 {
-	// All text frames (except TXXX) use the same codec.
-	if id[0] == 'T' && id != "TXXX" {
-		id = "T???"
-	}
-
-	c, ok := frameCodecs24[id]
-	if ok {
-		return c
-	}
-	return frameCodecs24[""] // unknown frame codec
 }
 
 func (c *codec24) decodeFrame(f *Frame, r io.Reader) (int, error) {
@@ -48,12 +139,64 @@ func (c *codec24) decodeFrame(f *Frame, r io.Reader) (int, error) {
 		return nn, err
 	}
 
-	// Use the frame header ID to look up the appropriate frame codec, and
-	// use the frame codec to decode the frame's payload.
-	fc := getFrameCodec24(f.Header.ID)
-	n, err = fc.decodePayload(c, f, r)
-	nn += n
-	return nn, err
+	// decode payload here
+	id := string(f.Header.ID)
+	if id[0] == 'T' {
+		id = "T___"
+	}
+	typ, ok := frameTable[id]
+	if !ok {
+		typ = frameTable["????"]
+	}
+
+	parser := newParser24(r, f.Header.Size)
+	v := reflect.New(typ)
+	elem := v.Elem()
+
+	// New returns a Value representing a pointer to a new zero value for the
+	// specified type. That is, the returned Value's Type is PtrTo(typ).
+	//v := reflect.New(typ)
+	enc := EncodingISO88591
+	fields := typ.NumField()
+	for i := 0; i < fields; i++ {
+		field := typ.Field(i)
+		switch {
+
+		case field.Type.Kind() == reflect.Slice:
+			switch field.Type.Elem().Kind() {
+			case reflect.Uint8:
+				parser.readByteSlice(field, elem.Field(i))
+			case reflect.String:
+				parser.readStringSlice(field, elem.Field(i), enc)
+			default:
+				parser.err = ErrUnknownFieldType
+			}
+
+		case field.Type.Kind() == reflect.String:
+			parser.readString(field, elem.Field(i), enc)
+
+		case field.Type.Kind() == reflect.Uint8:
+			switch field.Type.Name() {
+			case "Encoding":
+				enc = Encoding(parser.readUint8(field, elem.Field(i), 0, 3))
+			case "PictureType":
+				parser.readUint8(field, elem.Field(i), 0, 20)
+			case "GroupSymbol":
+				parser.readUint8(field, elem.Field(i), 0x80, 0xf0)
+			default:
+				parser.err = ErrUnknownFieldType
+			}
+
+		default:
+			parser.err = ErrUnknownFieldType
+		}
+	}
+
+	nn += parser.n
+	if parser.err == nil {
+		f.Payload = v.Interface().(FramePayload)
+	}
+	return nn, parser.err
 }
 
 func (c *codec24) decodeFrameHeader(h *FrameHeader, r io.Reader) (int, error) {
@@ -102,7 +245,8 @@ func (c *codec24) decodeFrameHeader(h *FrameHeader, r io.Reader) (int, error) {
 		}
 		if (flags & (1 << 6)) != 0 {
 			h.Flags |= FrameFlagHasGroupInfo
-			h.GroupID, err = readByte(r)
+			gid, err := readByte(r)
+			h.GroupID = GroupSymbol(gid)
 			nn++
 			if err != nil {
 				return nn, err
@@ -145,455 +289,6 @@ func (c *codec24) decodeFrameHeader(h *FrameHeader, r io.Reader) (int, error) {
 	return nn, nil
 }
 
-func (c *codec24) decodeTextFrame(f *Frame, r io.Reader) (int, error) {
-	p := &FramePayloadText{}
-
-	b := make([]byte, f.Header.Size)
-	n, err := r.Read(b)
-	if err != nil {
-		return n, err
-	}
-
-	if b[0] > 3 {
-		return n, ErrInvalidEncoding
-	}
-	p.Encoding = Encoding(b[0])
-
-	p.Text, err = decodeStrings(b[1:], p.Encoding)
-	if err != nil {
-		return n, err
-	}
-
-	f.Payload = p
-	return n, nil
-}
-
-func (c *codec24) decodeTXXXFrame(f *Frame, r io.Reader) (int, error) {
-	p := &FramePayloadTXXX{}
-
-	b := make([]byte, f.Header.Size)
-	n, err := r.Read(b)
-	if err != nil {
-		return n, err
-	}
-
-	if b[0] > 3 {
-		return n, ErrInvalidEncoding
-	}
-	p.Encoding = Encoding(b[0])
-
-	p.Description, b, err = decodeNextString(b[1:], p.Encoding)
-	if err != nil {
-		return n, err
-	}
-
-	p.Text, err = decodeString(b, p.Encoding)
-	if err != nil {
-		return n, err
-	}
-
-	f.Payload = p
-	return n, nil
-}
-
-func (c *codec24) decodeAPICFrame(f *Frame, r io.Reader) (int, error) {
-	p := &FramePayloadAPIC{}
-
-	b := make([]byte, f.Header.Size)
-	n, err := r.Read(b)
-	if err != nil {
-		return n, err
-	}
-
-	if b[0] > 3 {
-		return n, ErrInvalidEncoding
-	}
-	p.Encoding = Encoding(b[0])
-	b = b[1:]
-
-	if len(b) < 1 {
-		return n, ErrInvalidFrame
-	}
-	p.MimeType, b, err = decodeNextString(b, EncodingISO88591)
-	if err != nil {
-		return n, err
-	}
-
-	if len(b) < 1 {
-		return n, ErrInvalidFrame
-	}
-	p.Type = PictureType(b[0])
-
-	b = b[1:]
-	if len(b) < 1 {
-		return n, ErrInvalidFrame
-	}
-	p.Description, b, err = decodeNextString(b, p.Encoding)
-	if err != nil {
-		return n, ErrInvalidFrame
-	}
-
-	p.Data = []byte(b)
-
-	f.Payload = p
-	return n, nil
-}
-
-func (c *codec24) decodeUSLTFrame(f *Frame, r io.Reader) (int, error) {
-	p := &FramePayloadUSLT{}
-
-	if f.Header.Size < 4 {
-		return 0, ErrInvalidFrame
-	}
-
-	b := make([]byte, f.Header.Size)
-	n, err := r.Read(b)
-	if err != nil {
-		return n, err
-	}
-
-	if b[0] > 3 {
-		return n, ErrInvalidEncoding
-	}
-	p.Encoding = Encoding(b[0])
-
-	p.Language = string(b[1:4])
-
-	p.Descriptor, b, err = decodeNextString(b[4:], p.Encoding)
-	if err != nil {
-		return n, err
-	}
-
-	p.Text, err = decodeString(b, p.Encoding)
-	if err != nil {
-		return n, err
-	}
-
-	f.Payload = p
-	return n, nil
-}
-
-func (c *codec24) decodeUFIDFrame(f *Frame, r io.Reader) (int, error) {
-	p := &FramePayloadUFID{}
-
-	b := make([]byte, f.Header.Size)
-	n, err := r.Read(b)
-	if err != nil {
-		return n, err
-	}
-
-	p.Owner, b, err = decodeNextString(b, EncodingISO88591)
-	if err != nil {
-		return n, err
-	}
-
-	p.Identifier, err = decodeString(b, EncodingISO88591)
-	if err != nil {
-		return n, err
-	}
-
-	f.Payload = p
-	return n, nil
-}
-
-func (c *codec24) decodeUnknownFrame(f *Frame, r io.Reader) (int, error) {
-	p := &FramePayloadUnknown{}
-
-	b := make([]byte, f.Header.Size)
-	n, err := r.Read(b)
-	if err != nil {
-		return n, err
-	}
-
-	p.Data = b
-	f.Payload = p
-	return n, nil
-}
-
 func (c *codec24) encodeFrame(f *Frame, w io.Writer) (int, error) {
-	// Encode the payload into a temporary buffer, since we need to
-	// compute the size of the payload before writing the frame header.
-	buf := bytes.NewBuffer([]byte{})
-
-	// Use the frame header ID to look up the appropriate frame codec, and
-	// use the frame codec to encode the frame payload into the temporary
-	// buffer.
-	fc := getFrameCodec24(f.Header.ID)
-	size, err := fc.encodePayload(c, f, buf)
-	if err != nil {
-		return 0, err
-	}
-
-	nn := 0
-
-	// Write the frame header to the output.
-	n, err := c.encodeFrameHeader(&f.Header, size, w)
-	nn += n
-	if err != nil {
-		return nn, err
-	}
-
-	// Write the frame payload buffer to the output.
-	n, err = w.Write(buf.Bytes())
-	nn += n
-	return nn, err
-}
-
-func (c *codec24) encodeFrameHeader(h *FrameHeader, size int, w io.Writer) (int, error) {
-	nn := 0
-
-	// Write the frame ID.
-	idval := []byte(h.ID)
-	n, err := w.Write(idval)
-	nn += n
-	if err != nil {
-		return nn, err
-	}
-
-	// Generate the flags field (and adjust frame size if necessary).
-	var flags uint16
-	if h.Flags != 0 {
-		if (h.Flags & FrameFlagDiscardOnTagAlteration) != 0 {
-			flags |= 1 << 14
-		}
-		if (h.Flags & FrameFlagDiscardOnFileAlteration) != 0 {
-			flags |= 1 << 13
-		}
-		if (h.Flags & FrameFlagReadOnly) != 0 {
-			flags |= 1 << 12
-		}
-		if (h.Flags & FrameFlagHasGroupInfo) != 0 {
-			flags |= 1 << 6
-			size++
-		}
-		if (h.Flags & FrameFlagCompressed) != 0 {
-			flags |= 1 << 3
-			if (h.Flags & FrameFlagHasDataLength) == 0 {
-				return nn, ErrInvalidFrameFlags
-			}
-		}
-		if (h.Flags & FrameFlagEncrypted) != 0 {
-			flags |= 1 << 2
-			size++
-		}
-		if (h.Flags & FrameFlagUnsynchronized) != 0 {
-			flags |= 1 << 1
-		}
-		if (h.Flags & FrameFlagHasDataLength) != 0 {
-			flags |= 1 << 0
-			size += 4
-		}
-	}
-
-	// Create a 6-byte buffer for the rest of the header and store the
-	// frame size and flags in it.
-	buf := make([]byte, 6)
-	err = encodeSyncSafeUint32(buf[0:4], uint32(size))
-	if err != nil {
-		return nn, err
-	}
-	buf[4] = uint8(flags >> 8)
-	buf[5] = uint8(flags)
-
-	// Write the size and flags.
-	n, err = w.Write(buf)
-	nn += n
-	if err != nil {
-		return nn, err
-	}
-
-	// Write any extra data indicated by flags.
-	if h.Flags != 0 {
-		ex := make([]byte, 0)
-		if (h.Flags & FrameFlagHasGroupInfo) != 0 {
-			ex = append(ex, h.GroupID)
-		}
-		if (h.Flags & FrameFlagEncrypted) != 0 {
-			ex = append(ex, h.EncryptMethod)
-		}
-		if (h.Flags & FrameFlagHasDataLength) != 0 {
-			len := make([]byte, 4)
-			err = encodeSyncSafeUint32(len, h.DataLength)
-			ex = append(ex, len...)
-			if err != nil {
-				return nn, err
-			}
-		}
-		if len(ex) > 0 {
-			n, err = w.Write(ex)
-			nn += n
-			if err != nil {
-				return nn, err
-			}
-		}
-	}
-
-	return nn, err
-}
-
-// Return the total number of bytes required to store the frame header and any
-// extra fields indicated by the header flags.
-func (c *codec24) extraBytes(h *FrameHeader) uint32 {
-	var n uint32
-	if (h.Flags & FrameFlagHasGroupInfo) != 0 {
-		n++
-	}
-	if (h.Flags & FrameFlagEncrypted) != 0 {
-		n++
-	}
-	if (h.Flags & FrameFlagHasDataLength) != 0 {
-		n += 4
-	}
-	return n
-}
-
-func (c *codec24) encodeTextFrame(f *Frame, w io.Writer) (int, error) {
-	p := f.Payload.(*FramePayloadText)
-
-	nn := 0
-
-	n, err := w.Write([]byte{byte(p.Encoding)})
-	nn += n
-	if err != nil {
-		return nn, err
-	}
-
-	sb, err := encodeStrings(p.Text, p.Encoding)
-	if err != nil {
-		return nn, err
-	}
-
-	n, err = w.Write(sb)
-	nn += n
-	return nn, err
-}
-
-func (c *codec24) encodeTXXXFrame(f *Frame, w io.Writer) (int, error) {
-	p := f.Payload.(*FramePayloadTXXX)
-
-	nn := 0
-
-	n, err := w.Write([]byte{byte(p.Encoding)})
-	nn += n
-	if err != nil {
-		return nn, err
-	}
-
-	sb, err := encodeString(p.Description, p.Encoding)
-	if err != nil {
-		return nn, err
-	}
-	sb = append(sb, null[p.Encoding]...)
-	n, err = w.Write(sb)
-	nn += n
-	if err != nil {
-		return nn, err
-	}
-
-	sb, err = encodeString(p.Text, p.Encoding)
-	n, err = w.Write(sb)
-	nn += n
-	return nn, err
-}
-
-func (c *codec24) encodeAPICFrame(f *Frame, w io.Writer) (int, error) {
-	p := f.Payload.(*FramePayloadAPIC)
-
-	nn := 0
-
-	n, err := w.Write([]byte{byte(p.Encoding)})
-	nn += n
-	if err != nil {
-		return nn, err
-	}
-
-	sb, err := encodeString(p.MimeType, EncodingISO88591)
-	if err != nil {
-		return nn, err
-	}
-	sb = append(sb, 0)
-
-	n, err = w.Write(sb)
-	nn += n
-	if err != nil {
-		return nn, err
-	}
-
-	n, err = w.Write([]byte{byte(p.Type)})
-	nn += n
-	if err != nil {
-		return nn, err
-	}
-
-	sb, err = encodeString(p.Description, p.Encoding)
-	if err != nil {
-		return nn, err
-	}
-	sb = append(sb, null[p.Encoding]...)
-
-	n, err = w.Write(sb)
-	nn += n
-	if err != nil {
-		return nn, err
-	}
-
-	n, err = w.Write(p.Data)
-	nn += n
-	return nn, err
-}
-
-func (c *codec24) encodeUSLTFrame(f *Frame, w io.Writer) (int, error) {
-	p := f.Payload.(*FramePayloadUSLT)
-
-	nn := 0
-
-	b := []byte{byte(p.Encoding), p.Language[0], p.Language[1], p.Language[2]}
-	n, err := w.Write(b)
-	nn += n
-	if err != nil {
-		return nn, err
-	}
-
-	sb, err := encodeString(p.Descriptor, p.Encoding)
-	if err != nil {
-		return nn, err
-	}
-	sb = append(sb, null[p.Encoding]...)
-	n, err = w.Write(sb)
-	nn += n
-	if err != nil {
-		return nn, err
-	}
-
-	sb, err = encodeString(p.Text, p.Encoding)
-	n, err = w.Write(sb)
-	nn += n
-	return nn, err
-}
-
-func (c *codec24) encodeUFIDFrame(f *Frame, w io.Writer) (int, error) {
-	p := f.Payload.(*FramePayloadUFID)
-
-	nn := 0
-
-	sb, err := encodeString(p.Owner, EncodingISO88591)
-	if err != nil {
-		return nn, err
-	}
-	sb = append(sb, 0)
-	n, err := w.Write(sb)
-	nn += n
-	if err != nil {
-		return nn, err
-	}
-
-	sb, err = encodeString(p.Identifier, EncodingISO88591)
-	n, err = w.Write(sb)
-	nn += n
-	return nn, err
-}
-
-func (c *codec24) encodeUnknownFrame(f *Frame, w io.Writer) (int, error) {
-	p := f.Payload.(*FramePayloadUnknown)
-	return w.Write(p.Data)
+	return 0, ErrUnimplemented
 }

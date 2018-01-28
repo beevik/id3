@@ -28,7 +28,7 @@ func getCodec(v uint8) codec {
 	case 3:
 		return new(codec23)
 	case 4:
-		return new(codec24new)
+		return new(codec24)
 	default:
 		panic("invalid codec version")
 	}

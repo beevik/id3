@@ -10,12 +10,12 @@ type Frame struct {
 
 // A FrameHeader holds data common to all ID3 frames.
 type FrameHeader struct {
-	ID            string // Frame ID string
-	Size          uint32 // Frame size not including 10-byte header
-	Flags         uint8  // See FrameFlag*
-	GroupID       uint8  // Optional group identifier
-	EncryptMethod uint8  // Optional encryption method identifier
-	DataLength    uint32 // Optional data length (if FrameFlagHasDataLength is set)
+	ID            string      // Frame ID string
+	Size          uint32      // Frame size not including 10-byte header
+	Flags         uint8       // See FrameFlag*
+	GroupID       GroupSymbol // Optional group identifier
+	EncryptMethod uint8       // Optional encryption method identifier
+	DataLength    uint32      // Optional data length (if FrameFlagHasDataLength is set)
 }
 
 // Possible values of flags stored per frame.
@@ -73,13 +73,15 @@ type FramePayloadUnknown struct {
 }
 
 // FramePayloadText may contain the payload of any type of text frame
-// except for a user-defined TXXX text frame.
+// except for a user-defined TXXX text frame.  In v2.4, each text frame
+// may contain one or more text strings.  In all other versions, only one
+// text string may appear.
 type FramePayloadText struct {
 	Encoding Encoding
 	Text     []string
 }
 
-// FramePayloadTXXX contains a user-defined text payload.
+// FramePayloadTXXX contains a custom text payload.
 type FramePayloadTXXX struct {
 	Encoding    Encoding
 	Description string
@@ -118,35 +120,26 @@ type FramePayloadUSLT struct {
 }
 
 // FramePayloadGRID contains information describing the grouping of
-// otherwise unrelated frames.
+// otherwise unrelated frames. If a frame contains an optional group
+// identifier, there will be a corresponding GRID frame with data
+// describing the group.
 type FramePayloadGRID struct {
-	Owner string `id3:"iso88519"`
-	Group GroupSymbol
-	Data  []byte
+	Owner   string `id3:"iso88519"`
+	GroupID GroupSymbol
+	Data    []byte
 }
 
 //
 // Frame payload reflection table
 //
 
-var (
-	fUnkn = FramePayloadUnknown{}
-	fText = FramePayloadText{}
-	fTXXX = FramePayloadTXXX{}
-	fAPIC = FramePayloadAPIC{}
-	fUFID = FramePayloadUFID{}
-	fUSER = FramePayloadUSER{}
-	fUSLT = FramePayloadUSLT{}
-	fGRID = FramePayloadGRID{}
-)
-
 var frameTable = map[string]reflect.Type{
-	"":     reflect.TypeOf(fUnkn),
-	"T___": reflect.TypeOf(fText),
-	"TXXX": reflect.TypeOf(fTXXX),
-	"APIC": reflect.TypeOf(fAPIC),
-	"UFID": reflect.TypeOf(fUFID),
-	"USER": reflect.TypeOf(fUSER),
-	"USLT": reflect.TypeOf(fUSLT),
-	"GRID": reflect.TypeOf(fGRID),
+	"????": reflect.TypeOf(FramePayloadUnknown{}),
+	"T___": reflect.TypeOf(FramePayloadText{}),
+	"TXXX": reflect.TypeOf(FramePayloadTXXX{}),
+	"APIC": reflect.TypeOf(FramePayloadAPIC{}),
+	"UFID": reflect.TypeOf(FramePayloadUFID{}),
+	"USER": reflect.TypeOf(FramePayloadUSER{}),
+	"USLT": reflect.TypeOf(FramePayloadUSLT{}),
+	"GRID": reflect.TypeOf(FramePayloadGRID{}),
 }
