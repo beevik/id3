@@ -58,18 +58,25 @@ func writeByte(w io.Writer, b byte) error {
 	return err
 }
 
-// Return true if an id3 reflection tag contains a matching setting.
-func tagContains(f reflect.StructField, s string) bool {
-	tag, ok := f.Tag.Lookup("id3")
+type tagMap map[string]bool
+
+func (t tagMap) Lookup(s string) bool {
+	_, ok := t[s]
+	return ok
+}
+
+var emptyTags = make(tagMap)
+
+// Return a table of all tags on a struct field.
+func getTags(f reflect.StructField, key string) tagMap {
+	tag, ok := f.Tag.Lookup(key)
 	if !ok {
-		return false
+		return emptyTags
 	}
 
-	tag = string(tag[1 : len(tag)-1])
+	m := make(tagMap)
 	for _, t := range strings.Split(tag, ",") {
-		if t == s {
-			return true
-		}
+		m[t] = true
 	}
-	return false
+	return m
 }

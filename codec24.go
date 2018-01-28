@@ -24,14 +24,12 @@ func newCodec24() *codec24 {
 }
 
 func (c *codec24) decodeFrame(f *Frame, r io.Reader) (int, error) {
-	// Read the first four bytes of the frame header, which contains the ID.
+	// Read the first four bytes of the frame header to see if it's padding.
 	c.buf = make([]byte, 10)
 	c.n, c.err = r.Read(c.buf[0:4])
 	if c.err != nil {
 		return c.n, c.err
 	}
-
-	// Check if we hit padding.
 	if c.buf[0] == 0 && c.buf[1] == 0 && c.buf[2] == 0 && c.buf[3] == 0 {
 		return c.n, errPaddingEncountered
 	}
@@ -74,40 +72,41 @@ func (c *codec24) decodeFrame(f *Frame, r io.Reader) (int, error) {
 
 	// Instantiate a new frame payload using reflection.
 	v := reflect.New(typ)
-	elem := v.Elem()
+	vElem := v.Elem()
 
 	// Use the reflection type of the payload to process the frame's data.
 	enc := EncodingISO88591
 	fields := typ.NumField()
 	for i := 0; i < fields; i++ {
-		fieldValue := elem.Field(i)
+		fieldValue := vElem.Field(i)
 		field := typ.Field(i)
 		kind := field.Type.Kind()
+		tags := getTags(field, "id3")
 		switch {
 
 		case kind == reflect.Slice:
 			switch field.Type.Elem().Kind() {
 			case reflect.Uint8:
-				c.scanByteSlice(field, fieldValue)
+				c.scanByteSlice(tags, fieldValue)
 			case reflect.String:
-				c.scanStringSlice(field, fieldValue, enc)
+				c.scanStringSlice(tags, fieldValue, enc)
 			default:
 				c.err = ErrUnknownFieldType
 			}
 
 		case kind == reflect.String:
-			c.scanString(field, fieldValue, enc)
+			c.scanString(tags, fieldValue, enc)
 
 		case kind == reflect.Uint8:
 			switch field.Type.Name() {
 			case "frameID":
 				// Skip
 			case "Encoding":
-				enc = Encoding(c.scanUint8(field, fieldValue, 0, 3))
+				enc = Encoding(c.scanUint8(tags, fieldValue, 0, 3))
 			case "PictureType":
-				c.scanUint8(field, fieldValue, 0, 20)
+				c.scanUint8(tags, fieldValue, 0, 20)
 			case "GroupSymbol":
-				c.scanUint8(field, fieldValue, 0x80, 0xf0)
+				c.scanUint8(tags, fieldValue, 0x80, 0xf0)
 			default:
 				c.err = ErrUnknownFieldType
 			}
@@ -125,6 +124,9 @@ func (c *codec24) decodeFrame(f *Frame, r io.Reader) (int, error) {
 }
 
 func (c *codec24) consumeByte() byte {
+	if c.err != nil {
+		return 0
+	}
 	if len(c.buf) < 1 {
 		c.err = errInsufficientBuffer
 		return 0
@@ -135,6 +137,9 @@ func (c *codec24) consumeByte() byte {
 }
 
 func (c *codec24) consumeBytes(n int) []byte {
+	if c.err != nil {
+		return make([]byte, n)
+	}
 	if len(c.buf) < n {
 		c.err = errInsufficientBuffer
 		return make([]byte, n)
@@ -145,6 +150,9 @@ func (c *codec24) consumeBytes(n int) []byte {
 }
 
 func (c *codec24) consumeAll() []byte {
+	if c.err != nil {
+		return []byte{}
+	}
 	b := c.buf
 	c.buf = c.buf[:0]
 	return b
@@ -162,6 +170,7 @@ func (c *codec24) scanFrameHeader(h *FrameHeader) {
 	var size uint32
 	size, c.err = decodeSyncSafeUint32(hdr[4:8])
 	if c.err != nil {
+		c.err = ErrInvalidFrameHeader
 		return
 	}
 	h.Size = int(size)
@@ -186,7 +195,6 @@ func (c *codec24) scanFrameHeader(h *FrameHeader) {
 			h.GroupID = GroupSymbol(c.consumeByte())
 			if c.err != nil || h.GroupID < 0x80 || h.GroupID > 0xf0 {
 				c.err = ErrInvalidFrameHeader
-				return
 			}
 		}
 
@@ -199,7 +207,6 @@ func (c *codec24) scanFrameHeader(h *FrameHeader) {
 			h.EncryptMethod = c.consumeByte()
 			if c.err != nil || h.EncryptMethod < 0x80 || h.EncryptMethod > 0xf0 {
 				c.err = ErrInvalidFrameHeader
-				return
 			}
 		}
 
@@ -212,34 +219,29 @@ func (c *codec24) scanFrameHeader(h *FrameHeader) {
 			b := c.consumeBytes(4)
 			if c.err != nil {
 				c.err = ErrInvalidFrameHeader
-				return
 			}
 			h.DataLength, c.err = decodeSyncSafeUint32(b)
-			if c.err != nil {
-				return
-			}
 		}
 
 		// If the frame is compressed, it must include a data length indicator.
 		if (h.Flags&FrameFlagCompressed) != 0 && (h.Flags&FrameFlagHasDataLength) == 0 {
 			c.err = ErrInvalidFrameFlags
-			return
 		}
 	}
 }
 
-func (c *codec24) scanString(f reflect.StructField, v reflect.Value, enc Encoding) string {
+func (c *codec24) scanString(tags tagMap, v reflect.Value, enc Encoding) string {
 	var s string
 	if c.err != nil {
 		return s
 	}
 
-	if tagContains(f, "iso88519") {
+	if tags.Lookup("iso88519") {
 		enc = EncodingISO88591
 	}
 
-	if tagContains(f, "lang") {
-		b := c.consumeBytes(4)
+	if tags.Lookup("lang") {
+		b := c.consumeBytes(3)
 		if c.err != nil {
 			c.err = ErrInvalidFrame
 			return s
@@ -254,11 +256,10 @@ func (c *codec24) scanString(f reflect.StructField, v reflect.Value, enc Encodin
 	}
 
 	v.SetString(s)
-
 	return s
 }
 
-func (c *codec24) scanStringSlice(f reflect.StructField, v reflect.Value, enc Encoding) []string {
+func (c *codec24) scanStringSlice(tags tagMap, v reflect.Value, enc Encoding) []string {
 	var ss []string
 	if c.err != nil {
 		return ss
@@ -273,7 +274,7 @@ func (c *codec24) scanStringSlice(f reflect.StructField, v reflect.Value, enc En
 	return ss
 }
 
-func (c *codec24) scanByteSlice(f reflect.StructField, v reflect.Value) []byte {
+func (c *codec24) scanByteSlice(tags tagMap, v reflect.Value) []byte {
 	var b []byte
 	if c.err != nil {
 		return b
@@ -284,7 +285,7 @@ func (c *codec24) scanByteSlice(f reflect.StructField, v reflect.Value) []byte {
 	return b
 }
 
-func (c *codec24) scanUint8(f reflect.StructField, v reflect.Value, min uint8, max uint8) uint8 {
+func (c *codec24) scanUint8(tags tagMap, v reflect.Value, min uint8, max uint8) uint8 {
 	var e uint8
 	if c.err != nil {
 		return e
