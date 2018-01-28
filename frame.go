@@ -1,5 +1,7 @@
 package id3
 
+import "reflect"
+
 // A Frame represents an ID3 tag frame's header and payload.
 type Frame struct {
 	Header  FrameHeader
@@ -55,6 +57,24 @@ const (
 	PictureTypeBandLogotype                  = 19
 	PictureTypePublisherLogotype             = 20
 )
+
+var (
+	fText = FramePayloadText{}
+	fTXXX = FramePayloadTXXX{}
+	fAPIC = FramePayloadAPIC{}
+	fUFID = FramePayloadUFID{}
+	fUSLT = FramePayloadUSLT{}
+	fUnkn = FramePayloadUnknown{}
+)
+
+var frameTable = map[string]reflect.Type{
+	"T":    reflect.TypeOf(fText),
+	"TXXX": reflect.TypeOf(fTXXX),
+	"APIC": reflect.TypeOf(fAPIC),
+	"UFID": reflect.TypeOf(fUFID),
+	"USLT": reflect.TypeOf(fUSLT),
+	"":     reflect.TypeOf(fUnkn),
+}
 
 // FramePayload represents the payload of an ID3 tag frame.
 type FramePayload interface {
