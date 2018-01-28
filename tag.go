@@ -9,7 +9,7 @@ import (
 type Tag struct {
 	Version uint8   // 2, 3 or 4 (for 2.2, 2.3 or 2.4)
 	Flags   uint8   // See TagFlag* list
-	Size    uint32  // Size not including the header
+	Size    int     // Size not including the header
 	Frames  []Frame // All ID3 frames included in the tag
 }
 
@@ -21,16 +21,16 @@ const (
 	TagFlagFooter             = 1 << 4
 )
 
-func getCodec(v uint8) codec {
+func getCodec(v uint8) (codec, error) {
 	switch v {
 	case 2:
-		return new(codec22)
+		return newCodec22(), nil
 	case 3:
-		return new(codec23)
+		return newCodec23(), nil
 	case 4:
-		return new(codec24)
+		return newCodec24(), nil
 	default:
-		panic("invalid codec version")
+		return nil, ErrInvalidVersion
 	}
 }
 
@@ -54,12 +54,6 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 
 	// Process the version number (2.2, 2.3, or 2.4).
 	t.Version = hdr[3]
-	if t.Version < 2 || t.Version > 4 {
-		return nn, ErrInvalidVersion
-	}
-	if hdr[4] != 0 {
-		return nn, ErrInvalidVersion
-	}
 
 	// Process the header flags.
 	t.Flags = hdr[5]
@@ -71,13 +65,17 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	}
 
 	// Process the tag size.
-	t.Size, err = decodeSyncSafeUint32(hdr[6:10])
+	size, err := decodeSyncSafeUint32(hdr[6:10])
+	t.Size = int(size)
 	if err != nil {
 		return nn, err
 	}
 
 	// Choose a version-appropriate codec to process the data.
-	codec := getCodec(t.Version)
+	codec, err := getCodec(t.Version)
+	if err != nil {
+		return nn, err
+	}
 
 	// Decode the tag's frames.
 	for remain := t.Size; remain > 0; {
@@ -86,7 +84,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 		n, err = codec.decodeFrame(&f, r)
 		nn += int64(n)
 		if err == errPaddingEncountered {
-			pad := make([]byte, remain-4)
+			pad := make([]byte, remain-n)
 			n, err = r.Read(pad)
 			nn += int64(n)
 			if err != nil {
@@ -108,7 +106,10 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 // WriteTo writes an ID3 tag to an output stream. It returns the number of
 // bytes written and any error encountered during encoding.
 func (t *Tag) WriteTo(w io.Writer) (int64, error) {
-	codec := getCodec(t.Version)
+	codec, err := getCodec(t.Version)
+	if err != nil {
+		return 0, err
+	}
 
 	// Create a temporary buffer to hold encoded frames.
 	framebuf := bytes.NewBuffer([]byte{})
@@ -129,7 +130,7 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 
 	// Create a buffer holding the 10-byte header.
 	hdr := []byte{'I', 'D', '3', t.Version, 0, t.Flags, 0, 0, 0, 0}
-	err := encodeSyncSafeUint32(hdr[6:10], size)
+	err = encodeSyncSafeUint32(hdr[6:10], size)
 	if err != nil {
 		return 0, err
 	}

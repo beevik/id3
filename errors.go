@@ -23,4 +23,6 @@ var (
 	ErrUnimplemented        = errors.New("code path unimplemented")
 
 	errPaddingEncountered = errors.New("padding encountered")
+	errInvalidPayloadDef  = errors.New("invalid frame payload definition")
+	errInsufficientBuffer = errors.New("insufficient buffer")
 )

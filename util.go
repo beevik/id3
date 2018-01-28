@@ -60,10 +60,12 @@ func writeByte(w io.Writer, b byte) error {
 
 // Return true if an id3 reflection tag contains a matching setting.
 func tagContains(f reflect.StructField, s string) bool {
-	if f.Tag == "" {
+	tag, ok := f.Tag.Lookup("id3")
+	if !ok {
 		return false
 	}
-	tag := string(f.Tag[5 : len(f.Tag)-1])
+
+	tag = string(tag[1 : len(tag)-1])
 	for _, t := range strings.Split(tag, ",") {
 		if t == s {
 			return true

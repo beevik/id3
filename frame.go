@@ -1,5 +1,7 @@
 package id3
 
+import "reflect"
+
 // A Frame represents an ID3 tag frame's header and payload.
 type Frame struct {
 	Header  FrameHeader
@@ -9,7 +11,7 @@ type Frame struct {
 // A FrameHeader holds data common to all ID3 frames.
 type FrameHeader struct {
 	ID            string      // Frame ID string
-	Size          uint32      // Frame size not including 10-byte header
+	Size          int         // Frame size not including 10-byte header
 	Flags         uint8       // See FrameFlag*
 	GroupID       GroupSymbol // Optional group identifier
 	EncryptMethod uint8       // Optional encryption method identifier
@@ -64,10 +66,25 @@ type GroupSymbol byte
 type FramePayload interface {
 }
 
+// frameTypes holds all possible frame payload types supported by ID3.
+var frameTypes = []reflect.Type{
+	reflect.TypeOf(FramePayloadUnknown{}),
+	reflect.TypeOf(FramePayloadText{}),
+	reflect.TypeOf(FramePayloadTXXX{}),
+	reflect.TypeOf(FramePayloadAPIC{}),
+	reflect.TypeOf(FramePayloadUFID{}),
+	reflect.TypeOf(FramePayloadUSER{}),
+	reflect.TypeOf(FramePayloadUSLT{}),
+	reflect.TypeOf(FramePayloadGRID{}),
+}
+
+type frameID uint8
+
 // FramePayloadUnknown contains the payload of any frame whose ID is
 // unknown to this package.
 type FramePayloadUnknown struct {
-	Data []byte
+	frameID frameID `v23:"????" v24:"????"`
+	Data    []byte
 }
 
 // FramePayloadText may contain the payload of any type of text frame
@@ -75,12 +92,14 @@ type FramePayloadUnknown struct {
 // may contain one or more text strings.  In all other versions, only one
 // text string may appear.
 type FramePayloadText struct {
+	frameID  frameID `v22:"T__" v23:"T___" v24:"T___"`
 	Encoding Encoding
 	Text     []string
 }
 
 // FramePayloadTXXX contains a custom text payload.
 type FramePayloadTXXX struct {
+	frameID     frameID `v22:"TXX" v23:"TXXX" v24:"TXXX"`
 	Encoding    Encoding
 	Description string
 	Text        string
@@ -88,6 +107,7 @@ type FramePayloadTXXX struct {
 
 // FramePayloadAPIC contains the payload of an image frame.
 type FramePayloadAPIC struct {
+	frameID     frameID `v22:"PIC" v23:"APIC" v24:"APIC"`
 	Encoding    Encoding
 	MimeType    string `id3:"iso88519"`
 	Type        PictureType
@@ -97,12 +117,14 @@ type FramePayloadAPIC struct {
 
 // FramePayloadUFID contains a unique file identifier for the MP3.
 type FramePayloadUFID struct {
-	Owner      string `id3:"iso88519"`
-	Identifier string `id3:"iso88519"`
+	frameID    frameID `v22:"UFI" v23:"UFID" v24:"UFID"`
+	Owner      string  `id3:"iso88519"`
+	Identifier string  `id3:"iso88519"`
 }
 
 // FramePayloadUSER contains the terms of use description for the MP3.
 type FramePayloadUSER struct {
+	frameID  frameID `v23:"USER" v24:"USER"`
 	Encoding Encoding
 	Language string `id3:"lang"`
 	Text     string
@@ -111,6 +133,7 @@ type FramePayloadUSER struct {
 // FramePayloadUSLT contains unsynchronized lyrics and text transcription
 // data.
 type FramePayloadUSLT struct {
+	frameID    frameID `v22:"ULT" v23:"USLT" v24:"USLT"`
 	Encoding   Encoding
 	Language   string `id3:"lang"`
 	Descriptor string
@@ -122,7 +145,8 @@ type FramePayloadUSLT struct {
 // identifier, there will be a corresponding GRID frame with data
 // describing the group.
 type FramePayloadGRID struct {
-	Owner   string `id3:"iso88519"`
+	frameID frameID `v23:"GRID" v24:"GRID"`
+	Owner   string  `id3:"iso88519"`
 	GroupID GroupSymbol
 	Data    []byte
 }
