@@ -83,7 +83,7 @@ type FramePayloadTXXX struct {
 // FramePayloadAPIC contains the payload of an image frame.
 type FramePayloadAPIC struct {
 	Encoding    Encoding
-	MimeType    string
+	MimeType    string `id3:"iso88519"`
 	Type        PictureType
 	Description string
 	Data        []byte
@@ -91,15 +91,15 @@ type FramePayloadAPIC struct {
 
 // FramePayloadUFID contains a unique file identifier for the MP3.
 type FramePayloadUFID struct {
-	Owner      string
-	Identifier string
+	Owner      string `id3:"iso88519"`
+	Identifier string `id3:"iso88519"`
 }
 
 // FramePayloadUSLT contains unsychornized lyrics and text transcription
 // data.
 type FramePayloadUSLT struct {
 	Encoding   Encoding
-	Language   string
+	Language   string `id3:"lang"`
 	Descriptor string
 	Text       string
 }

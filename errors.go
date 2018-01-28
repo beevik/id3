@@ -19,6 +19,7 @@ var (
 	ErrInvalidFrameHeader   = errors.New("invalid frame header")
 	ErrInvalidFrameFlags    = errors.New("invalid frame flags")
 	ErrInvalidEncodedString = errors.New("invalid encoded string")
+	ErrUnknownFieldType     = errors.New("unknown field type")
 	ErrUnimplemented        = errors.New("code path unimplemented")
 
 	errPaddingEncountered = errors.New("padding encountered")
