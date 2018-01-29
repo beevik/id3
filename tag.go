@@ -82,16 +82,18 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	}
 
 	// Decode the extended header if it exists.
+	remain := t.Size
 	if (t.Flags & TagFlagExtended) != 0 {
 		n, err = codec.decodeExtendedHeader(t, r)
 		nn += int64(n)
 		if err != nil {
 			return nn, err
 		}
+		remain -= n
 	}
 
 	// Decode the tag's frames.
-	for remain := t.Size; remain > 0; {
+	for remain > 0 {
 		f := Frame{}
 
 		n, err = codec.decodeFrame(&f, r)
