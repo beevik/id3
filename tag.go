@@ -10,15 +10,19 @@ type Tag struct {
 	Version uint8   // 2, 3 or 4 (for 2.2, 2.3 or 2.4)
 	Flags   uint8   // See TagFlag* list
 	Size    int     // Size not including the header
+	CRC     uint32  // Optional CRC code
 	Frames  []Frame // All ID3 frames included in the tag
 }
 
 // Possible flags associated with an ID3 tag.
 const (
-	TagFlagUnsync       uint8 = 1 << 7
-	TagFlagExtended           = 1 << 6
-	TagFlagExperimental       = 1 << 5
-	TagFlagFooter             = 1 << 4
+	TagFlagUnsync uint8 = 1 << iota
+	TagFlagExtended
+	TagFlagExperimental
+	TagFlagFooter
+	TagFlagIsUpdate
+	TagFlagHasCRC
+	TagFlagHasRestrictions
 )
 
 func getCodec(v uint8) (codec, error) {
@@ -55,8 +59,14 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	// Process the version number (2.2, 2.3, or 2.4).
 	t.Version = hdr[3]
 
-	// Process the header flags.
-	t.Flags = hdr[5]
+	// Choose a version-appropriate codec to process the data.
+	codec, err := getCodec(t.Version)
+	if err != nil {
+		return nn, err
+	}
+
+	// Allow the codec to interpret the flags field.
+	t.Flags = codec.decodeHeaderFlags(hdr[5])
 
 	// If the "unsync" flag is set, then use an unsync reader to remove any
 	// sync codes.
@@ -71,10 +81,13 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 		return nn, err
 	}
 
-	// Choose a version-appropriate codec to process the data.
-	codec, err := getCodec(t.Version)
-	if err != nil {
-		return nn, err
+	// Decode the extended header if it exists.
+	if (t.Flags & TagFlagExtended) != 0 {
+		n, err = codec.decodeExtendedHeader(t, r)
+		nn += int64(n)
+		if err != nil {
+			return nn, err
+		}
 	}
 
 	// Decode the tag's frames.

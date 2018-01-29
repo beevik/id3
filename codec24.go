@@ -23,6 +23,84 @@ func newCodec24() *codec24 {
 	}
 }
 
+func (c *codec24) decodeHeaderFlags(flags uint8) uint8 {
+	var f uint8
+	if (flags & (1 << 7)) != 0 {
+		f |= TagFlagUnsync
+	}
+	if (flags & (1 << 6)) != 0 {
+		f |= TagFlagExtended
+	}
+	if (flags & (1 << 5)) != 0 {
+		f |= TagFlagExperimental
+	}
+	if (flags & (1 << 4)) != 0 {
+		f |= TagFlagFooter
+	}
+	return f
+}
+
+func (c *codec24) decodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
+	// Read the first 6 bytes of the extended header so we can see how big
+	// the addition extended data is.
+	c.buf = make([]byte, 6)
+	c.n, c.err = r.Read(c.buf)
+	if c.err != nil {
+		return c.n, c.err
+	}
+
+	// Read the size of the extended data.
+	var size uint32
+	size, c.err = decodeSyncSafeUint32(c.consumeBytes(4))
+	if c.err != nil {
+		return c.n, c.err
+	}
+
+	// The number of extended flags must be 1.
+	if c.consumeByte() != 1 {
+		return c.n, ErrInvalidHeader
+	}
+
+	exFlags := c.consumeByte()
+
+	// Load the extended data into the buffer.
+	var n int
+	c.buf = make([]byte, size-6)
+	n, c.err = r.Read(c.buf)
+	c.n += n
+	if c.err != nil {
+		return c.n, c.err
+	}
+
+	// Scan the extended header's contents.
+	if (exFlags & (1 << 6)) != 0 {
+		t.Flags |= TagFlagIsUpdate
+		if c.consumeByte() != 0 || c.err != nil {
+			return c.n, ErrInvalidHeader
+		}
+	}
+	if (exFlags & (1 << 5)) != 0 {
+		t.Flags |= TagFlagHasCRC
+		data := c.consumeBytes(6)
+		if c.err != nil || data[0] != 5 {
+			return c.n, ErrInvalidHeader
+		}
+		t.CRC, c.err = decodeSyncSafeUint32(data[1:])
+		if c.err != nil {
+			return c.n, ErrInvalidHeader
+		}
+	}
+	if (exFlags & (1 << 4)) != 0 {
+		t.Flags |= TagFlagHasRestrictions
+		data := c.consumeBytes(2)
+		if c.err != nil || data[0] != 1 {
+			return c.n, ErrInvalidHeader
+		}
+		// TODO: Store restrictions data
+	}
+	return c.n, c.err
+}
+
 func (c *codec24) decodeFrame(f *Frame, r io.Reader) (int, error) {
 	// Read the first four bytes of the frame header to see if it's padding.
 	c.buf = make([]byte, 10)

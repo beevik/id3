@@ -14,6 +14,14 @@ func newCodec22() *codec22 {
 	}
 }
 
+func (c *codec22) decodeHeaderFlags(flags uint8) uint8 {
+	return 0
+}
+
+func (c *codec22) decodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
+	return 0, ErrUnimplemented
+}
+
 func (c *codec22) decodeFrame(f *Frame, r io.Reader) (int, error) {
 	return 0, ErrUnimplemented
 }
