@@ -71,7 +71,8 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	}
 
 	// Allow the codec to interpret the flags field.
-	t.Flags = TagFlags(codec.HeaderFlags().Decode(hdr[5]))
+	flags := uint32(hdr[5])
+	t.Flags = TagFlags(codec.HeaderFlags().Decode(flags))
 
 	// If the "unsync" flag is set, then use an unsync reader to remove any
 	// sync codes.
@@ -101,7 +102,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	for remain > 0 {
 		f := Frame{}
 
-		n, err = codec.DecodeFrame(&f, r)
+		n, err = codec.DecodeFrame(t, &f, r)
 		nn += int64(n)
 		remain -= n
 
@@ -144,7 +145,7 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 	// Encode the tag's frames into the temporary buffer.
 	var size uint32
 	for _, f := range t.Frames {
-		n, err := codec.EncodeFrame(&f, wf)
+		n, err := codec.EncodeFrame(t, &f, wf)
 		size += uint32(n)
 		if err != nil {
 			return 0, err
@@ -152,7 +153,7 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 	}
 
 	// Create a buffer holding the 10-byte header.
-	flags := codec.HeaderFlags().Encode(uint32(t.Flags))
+	flags := uint8(codec.HeaderFlags().Encode(uint32(t.Flags)))
 	hdr := []byte{'I', 'D', '3', t.Version, 0, flags, 0, 0, 0, 0}
 	err = encodeSyncSafeUint32(hdr[6:10], size)
 	if err != nil {

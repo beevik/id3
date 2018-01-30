@@ -1,7 +1,6 @@
 package id3
 
 import (
-	"encoding/binary"
 	"io"
 	"reflect"
 )
@@ -13,6 +12,7 @@ import (
 type codec24 struct {
 	payloadTypes typeMap // table of all frame payload types
 	headerFlags  flagMap // tag header flag mapping
+	frameFlags   flagMap // frame header flag mapping
 	buf          []byte  // (de)serialization buffer
 	n            int     // total bytes (de)serialized
 	err          error   // first error encountered when (de)serializing
@@ -26,6 +26,16 @@ func newCodec24() *codec24 {
 			{1 << 6, uint32(TagFlagExtended)},
 			{1 << 5, uint32(TagFlagExperimental)},
 			{1 << 4, uint32(TagFlagFooter)},
+		},
+		frameFlags: flagMap{
+			{1 << 14, uint32(FrameFlagDiscardOnTagAlteration)},
+			{1 << 13, uint32(FrameFlagDiscardOnFileAlteration)},
+			{1 << 12, uint32(FrameFlagReadOnly)},
+			{1 << 6, uint32(FrameFlagHasGroupInfo)},
+			{1 << 3, uint32(FrameFlagCompressed)},
+			{1 << 2, uint32(FrameFlagEncrypted)},
+			{1 << 1, uint32(FrameFlagUnsynchronized)},
+			{1 << 0, uint32(FrameFlagHasDataLength)},
 		},
 	}
 }
@@ -95,7 +105,7 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 	return c.n, c.err
 }
 
-func (c *codec24) DecodeFrame(f *Frame, r io.Reader) (int, error) {
+func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	// Read the first four bytes of the frame header to see if it's padding.
 	c.buf = make([]byte, 10)
 	c.n, c.err = r.Read(c.buf[0:4])
@@ -283,56 +293,35 @@ func (c *codec24) scanFrameHeader(h *FrameHeader) {
 	h.Size = int(size)
 
 	h.Flags = 0
-	flags := binary.BigEndian.Uint16(hdr[8:10])
+	flags := uint32(hdr[8])<<8 | uint32(hdr[9])
 	if flags != 0 {
-		if (flags & (1 << 14)) != 0 {
-			h.Flags |= FrameFlagDiscardOnTagAlteration
+		h.Flags = FrameFlags(c.frameFlags.Decode(flags))
+
+		// If the frame is compressed, it must include a data length indicator.
+		if (h.Flags&FrameFlagCompressed) != 0 && (h.Flags&FrameFlagHasDataLength) == 0 {
+			c.err = ErrInvalidFrameFlags
 		}
 
-		if (flags & (1 << 13)) != 0 {
-			h.Flags |= FrameFlagDiscardOnFileAlteration
-		}
-
-		if (flags & (1 << 12)) != 0 {
-			h.Flags |= FrameFlagReadOnly
-		}
-
-		if (flags & (1 << 6)) != 0 {
-			h.Flags |= FrameFlagHasGroupInfo
+		if (h.Flags & FrameFlagHasGroupInfo) != 0 {
 			h.GroupID = GroupSymbol(c.consumeByte())
 			if c.err != nil || h.GroupID < 0x80 || h.GroupID > 0xf0 {
 				c.err = ErrInvalidFrameHeader
 			}
 		}
 
-		if (flags & (1 << 3)) != 0 {
-			h.Flags |= FrameFlagCompressed
-		}
-
-		if (flags & (1 << 2)) != 0 {
-			h.Flags |= FrameFlagEncrypted
+		if (h.Flags & FrameFlagEncrypted) != 0 {
 			h.EncryptMethod = c.consumeByte()
 			if c.err != nil || h.EncryptMethod < 0x80 || h.EncryptMethod > 0xf0 {
 				c.err = ErrInvalidFrameHeader
 			}
 		}
 
-		if (flags & (1 << 1)) != 0 {
-			h.Flags |= FrameFlagUnsynchronized
-		}
-
-		if (flags & (1 << 0)) != 0 {
-			h.Flags |= FrameFlagHasDataLength
+		if (h.Flags & FrameFlagHasDataLength) != 0 {
 			b := c.consumeBytes(4)
 			if c.err != nil {
 				c.err = ErrInvalidFrameHeader
 			}
 			h.DataLength, c.err = decodeSyncSafeUint32(b)
-		}
-
-		// If the frame is compressed, it must include a data length indicator.
-		if (h.Flags&FrameFlagCompressed) != 0 && (h.Flags&FrameFlagHasDataLength) == 0 {
-			c.err = ErrInvalidFrameFlags
 		}
 	}
 }
@@ -401,6 +390,6 @@ func (c *codec24) scanUint8(tags tagList, v reflect.Value, min uint8, max uint8)
 	return e
 }
 
-func (c *codec24) EncodeFrame(f *Frame, w io.Writer) (int, error) {
+func (c *codec24) EncodeFrame(t *Tag, f *Frame, w io.Writer) (int, error) {
 	return 0, ErrUnimplemented
 }

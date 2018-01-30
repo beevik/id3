@@ -24,7 +24,7 @@ type FramePayload interface {
 
 // FrameFlags describe flags that may appear within a FrameHeader. Not all
 // flags are supported by all versions of the ID3 codec.
-type FrameFlags uint8
+type FrameFlags uint32
 
 // All possible FrameFlags.
 const (

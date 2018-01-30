@@ -91,12 +91,12 @@ func getTags(f reflect.StructField, key string) tagList {
 
 // A flag map maps encoded and decoded versions of flags to one another.
 type flagMap []struct {
-	encoded uint8  // the encoded representation of a flag
+	encoded uint32 // the encoded representation of a flag
 	decoded uint32 // the decoded representation of a flag
 }
 
 // Return the decoded representation of the encoded flags.
-func (f flagMap) Decode(flags uint8) uint32 {
+func (f flagMap) Decode(flags uint32) uint32 {
 	var result uint32
 	for _, e := range f {
 		if (e.encoded & flags) != 0 {
@@ -107,8 +107,8 @@ func (f flagMap) Decode(flags uint8) uint32 {
 }
 
 // Return the encoded representation of the decoded flags.
-func (f flagMap) Encode(flags uint32) uint8 {
-	var result uint8
+func (f flagMap) Encode(flags uint32) uint32 {
+	var result uint32
 	for _, e := range f {
 		if (e.decoded & flags) != 0 {
 			result |= e.encoded
