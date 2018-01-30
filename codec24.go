@@ -48,7 +48,7 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 	// Read the first 6 bytes of the extended header so we can see how big
 	// the addition extended data is.
 	c.buf = make([]byte, 6)
-	c.n, c.err = r.Read(c.buf)
+	c.n, c.err = io.ReadFull(r, c.buf)
 	if c.err != nil {
 		return c.n, c.err
 	}
@@ -70,7 +70,7 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 	// Load the extended data into the buffer.
 	var n int
 	c.buf = make([]byte, size-6)
-	n, c.err = r.Read(c.buf)
+	n, c.err = io.ReadFull(r, c.buf)
 	c.n += n
 	if c.err != nil {
 		return c.n, c.err
@@ -108,7 +108,7 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	// Read the first four bytes of the frame header to see if it's padding.
 	c.buf = make([]byte, 10)
-	c.n, c.err = r.Read(c.buf[0:4])
+	c.n, c.err = io.ReadFull(r, c.buf[0:4])
 	if c.err != nil {
 		return c.n, c.err
 	}
@@ -118,7 +118,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 
 	// Read the rest of the header.
 	var n int
-	n, c.err = r.Read(c.buf[4:10])
+	n, c.err = io.ReadFull(r, c.buf[4:10])
 	c.n += n
 	if c.err != nil {
 		return c.n, c.err
@@ -137,7 +137,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 
 	// Read the rest of the frame into the frame buffer.
 	c.buf = append(c.buf, make([]byte, size)...)
-	n, c.err = r.Read(c.buf[10:])
+	n, c.err = io.ReadFull(r, c.buf[10:])
 	c.n += n
 	if c.err != nil {
 		return c.n, c.err

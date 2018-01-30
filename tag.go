@@ -50,9 +50,9 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 
 	// Attempt to read the 10-byte ID3 header.
 	hdr := make([]byte, 10)
-	n, err := r.Read(hdr)
+	n, err := io.ReadFull(r, hdr)
 	nn += int64(n)
-	if n < 10 || err != nil {
+	if err != nil {
 		return nn, ErrInvalidTag
 	}
 
@@ -109,7 +109,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 		if err == errPaddingEncountered {
 			t.Padding = remain
 			pad := make([]byte, t.Padding)
-			n, err = r.Read(pad)
+			n, err = io.ReadFull(r, pad)
 			nn += int64(n)
 			if err != nil {
 				return nn, err
