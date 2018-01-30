@@ -25,30 +25,44 @@ func main() {
 		os.Exit(1)
 	}
 
-	var tag id3.Tag
-	_, err = tag.ReadFrom(file)
-	if err != nil {
-		fmt.Printf("ERROR: %v\n", err)
-		os.Exit(1)
-	}
-
-	for _, f := range tag.Frames {
-		fmt.Printf("Frame %s", f.Header.ID)
-		switch ff := f.Payload.(type) {
-		case *id3.FramePayloadAPIC:
-			fmt.Printf(": #%d %s[%s] (%d bytes)", ff.Type, ff.Description, ff.MimeType, len(ff.Data))
-		case *id3.FramePayloadText:
-			fmt.Printf(": %s", strings.Join(ff.Text, " - "))
-		case *id3.FramePayloadTXXX:
-			fmt.Printf(": %s -> %s", ff.Description, ff.Text)
-		case *id3.FramePayloadUFID:
-			fmt.Printf(": %s -> %s", ff.Owner, ff.Identifier)
-		case *id3.FramePayloadUSLT:
-			fmt.Printf(": [%s:%s] %s", ff.Language, ff.Descriptor, ff.Text)
-		case *id3.FramePayloadUnknown:
-			fmt.Printf(": (%d bytes)", len(ff.Data))
+	for {
+		var tag id3.Tag
+		_, err = tag.ReadFrom(file)
+		if err == id3.ErrInvalidTag {
+			break
 		}
-		fmt.Printf("\n")
+		if err != nil {
+			fmt.Printf("ERROR: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Version: 2.%d\n", tag.Version)
+		fmt.Printf("Size: %d bytes\n", tag.Size)
+		if (tag.Flags & id3.TagFlagHasCRC) != 0 {
+			fmt.Printf("CRC: 0x%08x\n", tag.CRC)
+		}
+		if tag.Padding > 0 {
+			fmt.Printf("Pad: %d bytes\n", tag.Padding)
+		}
+
+		for _, f := range tag.Frames {
+			fmt.Printf("[size=0x%04x] %s", f.Header.Size+10, f.Header.ID)
+			switch ff := f.Payload.(type) {
+			case *id3.FramePayloadAPIC:
+				fmt.Printf(": #%d %s[%s] (%d bytes)", ff.Type, ff.Description, ff.MimeType, len(ff.Data))
+			case *id3.FramePayloadText:
+				fmt.Printf(": %s", strings.Join(ff.Text, " - "))
+			case *id3.FramePayloadTXXX:
+				fmt.Printf(": %s -> %s", ff.Description, ff.Text)
+			case *id3.FramePayloadUFID:
+				fmt.Printf(": %s -> %s", ff.Owner, ff.Identifier)
+			case *id3.FramePayloadUSLT:
+				fmt.Printf(": [%s:%s] %s", ff.Language, ff.Descriptor, ff.Text)
+			case *id3.FramePayloadUnknown:
+				fmt.Printf(": (%d bytes)", len(ff.Data))
+			}
+			fmt.Printf("\n")
+		}
 	}
 }
 

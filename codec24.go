@@ -22,10 +22,10 @@ func newCodec24() *codec24 {
 	return &codec24{
 		payloadTypes: newTypeMap("v24"),
 		headerFlags: flagMap{
-			{1 << 7, TagFlagUnsync},
-			{1 << 6, TagFlagExtended},
-			{1 << 5, TagFlagExperimental},
-			{1 << 4, TagFlagFooter},
+			{1 << 7, uint32(TagFlagUnsync)},
+			{1 << 6, uint32(TagFlagExtended)},
+			{1 << 5, uint32(TagFlagExperimental)},
+			{1 << 4, uint32(TagFlagFooter)},
 		},
 	}
 }

@@ -2,69 +2,74 @@ package id3
 
 import "reflect"
 
-// A Frame represents an ID3 tag frame's header and payload.
+// A Frame holds an entire ID3 frame including its header and payload.
 type Frame struct {
 	Header  FrameHeader
 	Payload FramePayload
 }
 
-// A FrameHeader holds data common to all ID3 frames.
+// A FrameHeader holds the data described by a frame header.
 type FrameHeader struct {
 	ID            string      // Frame ID string
 	Size          int         // Frame size not including 10-byte header
-	Flags         uint8       // See FrameFlag*
+	Flags         FrameFlags  // Flags
 	GroupID       GroupSymbol // Optional group identifier
 	EncryptMethod uint8       // Optional encryption method identifier
 	DataLength    uint32      // Optional data length (if FrameFlagHasDataLength is set)
 }
 
-// Possible values of flags stored per frame.
+// A FramePayload describes the data held within a frame's payload.
+type FramePayload interface {
+}
+
+// FrameFlags describe flags that may appear within a FrameHeader. Not all
+// flags are supported by all versions of the ID3 codec.
+type FrameFlags uint8
+
+// All possible FrameFlags.
 const (
-	FrameFlagDiscardOnTagAlteration  uint8 = 1 << 0 // Discard frame if tag is altered
-	FrameFlagDiscardOnFileAlteration       = 1 << 1 // Discard frame if file is altered
-	FrameFlagReadOnly                      = 1 << 2 // Frame is read-only
-	FrameFlagHasGroupInfo                  = 1 << 3 // Frame has group info
-	FrameFlagCompressed                    = 1 << 4 // Frame is compressed
-	FrameFlagEncrypted                     = 1 << 5 // Frame is encrypted
-	FrameFlagUnsynchronized                = 1 << 6 // Frame is unsynchronized
-	FrameFlagHasDataLength                 = 1 << 7 // Frame has a data length indicator
+	FrameFlagDiscardOnTagAlteration  FrameFlags = 1 << iota // Discard frame if tag is altered
+	FrameFlagDiscardOnFileAlteration                        // Discard frame if file is altered
+	FrameFlagReadOnly                                       // Frame is read-only
+	FrameFlagHasGroupInfo                                   // Frame has group info
+	FrameFlagCompressed                                     // Frame is compressed
+	FrameFlagEncrypted                                      // Frame is encrypted
+	FrameFlagUnsynchronized                                 // Frame is unsynchronized
+	FrameFlagHasDataLength                                  // Frame has a data length indicator
 )
 
-// PictureType represents the type of picture stored in an APIC frame.
+// PictureType describes the type of picture stored within an APIC frame.
 type PictureType uint8
 
-// Possible values used to indicate an APIC frame's picture type.
+// All possible values of the Type field within an APIC frame payload.
 const (
-	PictureTypeOther             PictureType = 0
-	PictureTypeIcon                          = 1
-	PictureTypeIconOther                     = 2
-	PictureTypeCoverFront                    = 3
-	PictureTypeCoverBack                     = 4
-	PictureTypeLeaflet                       = 5
-	PictureTypeMedia                         = 6
-	PictureTypeArtistLead                    = 7
-	PictureTypeArtist                        = 8
-	PictureTypeConductor                     = 9
-	PictureTypeBand                          = 10
-	PictureTypeComposer                      = 11
-	PictureTypeLyricist                      = 12
-	PictureTypeRecordingLocation             = 13
-	PictureTypeDuringRecording               = 14
-	PictureTypeDuringPerformance             = 15
-	PictureTypeVideoCapture                  = 16
-	PictureTypeFish                          = 17
-	PictureTypeIlllustration                 = 18
-	PictureTypeBandLogotype                  = 19
-	PictureTypePublisherLogotype             = 20
+	PictureTypeOther PictureType = iota
+	PictureTypeIcon
+	PictureTypeIconOther
+	PictureTypeCoverFront
+	PictureTypeCoverBack
+	PictureTypeLeaflet
+	PictureTypeMedia
+	PictureTypeArtistLead
+	PictureTypeArtist
+	PictureTypeConductor
+	PictureTypeBand
+	PictureTypeComposer
+	PictureTypeLyricist
+	PictureTypeRecordingLocation
+	PictureTypeDuringRecording
+	PictureTypeDuringPerformance
+	PictureTypeVideoCapture
+	PictureTypeFish
+	PictureTypeIlllustration
+	PictureTypeBandLogotype
+	PictureTypePublisherLogotype
 )
 
 // A GroupSymbol is a value between 0x80 and 0xF0 that uniquely identifies
-// a grouped set of frames.
+// a grouped set of frames. The data associated with each GroupSymbol value
+// is described futher in GRID frames.
 type GroupSymbol byte
-
-// FramePayload represents the payload of an ID3 tag frame.
-type FramePayload interface {
-}
 
 // frameTypes holds all possible frame payload types supported by ID3.
 var frameTypes = []reflect.Type{
