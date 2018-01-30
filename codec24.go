@@ -11,36 +11,30 @@ import (
 //
 
 type codec24 struct {
-	payloadTypes typeMap
-	buf          []byte // scan buffer
-	n            int    // total bytes read or written from/to the stream
-	err          error  // first error encountered when decoding or encoding
+	payloadTypes typeMap // table of all frame payload types
+	headerFlags  flagMap // tag header flag mapping
+	buf          []byte  // (de)serialization buffer
+	n            int     // total bytes (de)serialized
+	err          error   // first error encountered when (de)serializing
 }
 
 func newCodec24() *codec24 {
 	return &codec24{
 		payloadTypes: newTypeMap("v24"),
+		headerFlags: flagMap{
+			{1 << 7, TagFlagUnsync},
+			{1 << 6, TagFlagExtended},
+			{1 << 5, TagFlagExperimental},
+			{1 << 4, TagFlagFooter},
+		},
 	}
 }
 
-func (c *codec24) decodeHeaderFlags(flags uint8) uint8 {
-	var f uint8
-	if (flags & (1 << 7)) != 0 {
-		f |= TagFlagUnsync
-	}
-	if (flags & (1 << 6)) != 0 {
-		f |= TagFlagExtended
-	}
-	if (flags & (1 << 5)) != 0 {
-		f |= TagFlagExperimental
-	}
-	if (flags & (1 << 4)) != 0 {
-		f |= TagFlagFooter
-	}
-	return f
+func (c *codec24) HeaderFlags() flagMap {
+	return c.headerFlags
 }
 
-func (c *codec24) decodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
+func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 	// Read the first 6 bytes of the extended header so we can see how big
 	// the addition extended data is.
 	c.buf = make([]byte, 6)
@@ -101,7 +95,7 @@ func (c *codec24) decodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 	return c.n, c.err
 }
 
-func (c *codec24) decodeFrame(f *Frame, r io.Reader) (int, error) {
+func (c *codec24) DecodeFrame(f *Frame, r io.Reader) (int, error) {
 	// Read the first four bytes of the frame header to see if it's padding.
 	c.buf = make([]byte, 10)
 	c.n, c.err = r.Read(c.buf[0:4])
@@ -407,6 +401,6 @@ func (c *codec24) scanUint8(tags tagList, v reflect.Value, min uint8, max uint8)
 	return e
 }
 
-func (c *codec24) encodeFrame(f *Frame, w io.Writer) (int, error) {
+func (c *codec24) EncodeFrame(f *Frame, w io.Writer) (int, error) {
 	return 0, ErrUnimplemented
 }

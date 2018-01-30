@@ -58,6 +58,10 @@ func writeByte(w io.Writer, b byte) error {
 	return err
 }
 
+//
+// tagList
+//
+
 type tagList map[string]bool
 
 func (t tagList) Lookup(s string) bool {
@@ -65,13 +69,13 @@ func (t tagList) Lookup(s string) bool {
 	return ok
 }
 
-var emptyTags = make(tagList)
+var emptyTagList = make(tagList)
 
 // Return a table of all tags on a struct field.
 func getTags(f reflect.StructField, key string) tagList {
 	tag, ok := f.Tag.Lookup(key)
 	if !ok {
-		return emptyTags
+		return emptyTagList
 	}
 
 	l := make(tagList)
@@ -79,4 +83,36 @@ func getTags(f reflect.StructField, key string) tagList {
 		l[t] = true
 	}
 	return l
+}
+
+//
+// flagMap
+//
+
+// A flag map maps encoded and decoded versions of flags to one another.
+type flagMap []struct {
+	encoded uint8  // the encoded representation of a flag
+	decoded uint32 // the decoded representation of a flag
+}
+
+// Return the decoded representation of the encoded flags.
+func (f flagMap) Decode(flags uint8) uint32 {
+	var result uint32
+	for _, e := range f {
+		if (e.encoded & flags) != 0 {
+			result |= e.decoded
+		}
+	}
+	return result
+}
+
+// Return the encoded representation of the decoded flags.
+func (f flagMap) Encode(flags uint32) uint8 {
+	var result uint8
+	for _, e := range f {
+		if (e.decoded & flags) != 0 {
+			result |= e.encoded
+		}
+	}
+	return result
 }
