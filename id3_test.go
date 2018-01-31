@@ -3,7 +3,6 @@ package id3
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"testing"
 )
 
@@ -127,49 +126,15 @@ func TestUnsync(t *testing.T) {
 		{[]byte{0xff, 0xfe, 0xff, 0xfe, 0xff, 0xfe}, []byte{0xff, 0x00, 0xfe, 0xff, 0x00, 0xfe, 0xff, 0x00, 0xfe}},
 	}
 
-	// Test synced -> unsynced
 	for i, c := range cases {
-		for chunk := 1; chunk <= len(c.synced); chunk++ {
-			b := bytes.NewBuffer([]byte{})
-			w := newUnsyncWriter(b)
-			for j := 0; j < len(c.synced); j += chunk {
-				right := j + chunk
-				if right > len(c.synced) {
-					right = len(c.synced)
-				}
-				_, err := w.Write(c.synced[j:right])
-				if err != nil {
-					t.Error(err)
-				}
-			}
-			if bytes.Compare(b.Bytes(), c.unsynced) != 0 {
-				t.Errorf("case %d:\n  unsync write failed (chunk=%d). got: %v\n", i, chunk, b.Bytes())
-			}
+		u := addUnsyncCodes(c.synced)
+		if bytes.Compare(u, c.unsynced) != 0 {
+			t.Errorf("case %d:\n  unsync failed. got %v, expected %v\n", i, u, c.unsynced)
 		}
-	}
 
-	// Test unsynced -> synced
-	for i, c := range cases {
-		for chunk := 1; chunk <= len(c.unsynced)*2; chunk++ {
-			b := bytes.NewReader(c.unsynced)
-			r := newUnsyncReader(b)
-
-			buf := make([]byte, chunk)
-			out := make([]byte, 0)
-			for {
-				n, err := r.Read(buf)
-				if err == io.EOF {
-					break
-				}
-				if err != nil {
-					t.Error(err)
-				}
-				out = append(out, buf[:n]...)
-			}
-
-			if bytes.Compare(out, c.synced) != 0 {
-				t.Errorf("case %d:\n  unsync read failed (chunk=%d). got %v\n", i, chunk, out)
-			}
+		s := removeUnsyncCodes(c.unsynced)
+		if bytes.Compare(s, c.synced) != 0 {
+			t.Errorf("case %d:\n  deUnsync failed. got %v, expected %v\n", i, s, c.synced)
 		}
 	}
 }

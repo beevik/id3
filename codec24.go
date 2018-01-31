@@ -11,8 +11,8 @@ import (
 
 type codec24 struct {
 	payloadTypes typeMap // table of all frame payload types
-	headerFlags  flagMap // tag header flag mapping
-	frameFlags   flagMap // frame header flag mapping
+	headerFlags  flagMap // tag header flags
+	frameFlags   flagMap // frame header flags
 	buf          []byte  // (de)serialization buffer
 	n            int     // total bytes (de)serialized
 	err          error   // first error encountered when (de)serializing
@@ -60,14 +60,18 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 		return c.n, c.err
 	}
 
-	// The number of extended flags must be 1.
+	// The number of extended flag bytes must be 1.
 	if c.consumeByte() != 1 {
 		return c.n, ErrInvalidHeader
 	}
 
+	// Read the extended flags field.
 	exFlags := c.consumeByte()
+	if c.err != nil {
+		return c.n, c.err
+	}
 
-	// Load the extended data into the buffer.
+	// Read the rest of the extended header into the buffer.
 	var n int
 	c.buf = make([]byte, size-6)
 	n, c.err = io.ReadFull(r, c.buf)
@@ -76,7 +80,7 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 		return c.n, c.err
 	}
 
-	// Scan the extended header's contents.
+	// Scan extended data fields indicated by the flags.
 	if (exFlags & (1 << 6)) != 0 {
 		t.Flags |= TagFlagIsUpdate
 		if c.consumeByte() != 0 || c.err != nil {
@@ -100,53 +104,66 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 		if c.err != nil || data[0] != 1 {
 			return c.n, ErrInvalidHeader
 		}
-		// TODO: Store restrictions data
+		t.Restrictions = uint16(data[0])<<8 | uint16(data[1])
 	}
 	return c.n, c.err
 }
 
 func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	// Read the first four bytes of the frame header to see if it's padding.
-	c.buf = make([]byte, 10)
-	c.n, c.err = io.ReadFull(r, c.buf[0:4])
-	if c.err != nil {
-		return c.n, c.err
+	hdr := make([]byte, 10)
+	nn, err := io.ReadFull(r, hdr[0:4])
+	if err != nil {
+		return nn, err
 	}
-	if c.buf[0] == 0 && c.buf[1] == 0 && c.buf[2] == 0 && c.buf[3] == 0 {
-		return c.n, errPaddingEncountered
+	if hdr[0] == 0 && hdr[1] == 0 && hdr[2] == 0 && hdr[3] == 0 {
+		return nn, errPaddingEncountered
 	}
+	f.Header.ID = string(hdr[0:4])
 
 	// Read the rest of the header.
-	var n int
-	n, c.err = io.ReadFull(r, c.buf[4:10])
-	c.n += n
-	if c.err != nil {
-		return c.n, c.err
+	n, err := io.ReadFull(r, hdr[4:10])
+	nn += n
+	if err != nil {
+		return nn, err
 	}
 
-	// Examine the size field to figure out how much more data needs to
-	// be read into the frame buffer.
-	var size uint32
-	size, c.err = decodeSyncSafeUint32(c.buf[4:8])
-	if c.err != nil {
-		return c.n, c.err
+	// Process the frame's size.
+	size, err := decodeSyncSafeUint32(hdr[4:8])
+	if err != nil {
+		return nn, err
 	}
 	if size < 1 {
-		return c.n, ErrInvalidFrameHeader
+		return nn, ErrInvalidFrameHeader
+	}
+	f.Header.Size = int(size)
+
+	// Process the flags.
+	flags := uint32(hdr[8])<<8 | uint32(hdr[9])
+	f.Header.Flags = FrameFlags(c.frameFlags.Decode(flags))
+
+	// Read the rest of the frame into a buffer.
+	buf := make([]byte, size)
+	n, err = io.ReadFull(r, buf)
+	nn += n
+	if err != nil {
+		return n, err
 	}
 
-	// Read the rest of the frame into the frame buffer.
-	c.buf = append(c.buf, make([]byte, size)...)
-	n, c.err = io.ReadFull(r, c.buf[10:])
-	c.n += n
-	if c.err != nil {
-		return c.n, c.err
+	// Strip unsync codes if the frame is unsynchronized but the tag isn't.
+	if (f.Header.Flags&FrameFlagUnsynchronized) != 0 && (t.Flags&TagFlagUnsync) == 0 {
+		buf = removeUnsyncCodes(buf)
 	}
 
-	// Scan the header's contents.
-	c.scanFrameHeader(&f.Header)
-	if c.err != nil {
-		return c.n, c.err
+	// Initialize the scanner.
+	c.buf, c.n, c.err = buf, nn, nil
+
+	// Scan additional header fields indicated by flags.
+	if f.Header.Flags != 0 {
+		c.scanFlaggedHeaderData(&f.Header)
+		if c.err != nil {
+			return c.n, c.err
+		}
 	}
 
 	// Select a frame payload type based on the ID.
@@ -200,6 +217,108 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	}
 
 	return c.n, c.err
+}
+
+func (c *codec24) scanFlaggedHeaderData(h *FrameHeader) {
+	// If the frame is compressed, it must include a data length indicator.
+	if (h.Flags&FrameFlagCompressed) != 0 && (h.Flags&FrameFlagHasDataLength) == 0 {
+		c.err = ErrInvalidFrameFlags
+		return
+	}
+
+	if (h.Flags & FrameFlagHasGroupInfo) != 0 {
+		gid := c.consumeByte()
+		if c.err != nil || gid < 0x80 || gid > 0xf0 {
+			c.err = ErrInvalidFrameHeader
+			return
+		}
+		h.GroupID = GroupSymbol(gid)
+	}
+
+	if (h.Flags & FrameFlagEncrypted) != 0 {
+		em := c.consumeByte()
+		if c.err != nil || em < 0x80 || em > 0xf0 {
+			c.err = ErrInvalidFrameHeader
+			return
+		}
+		h.EncryptMethod = em
+	}
+
+	if (h.Flags & FrameFlagHasDataLength) != 0 {
+		b := c.consumeBytes(4)
+		if c.err != nil {
+			c.err = ErrInvalidFrameHeader
+		}
+		h.DataLength, c.err = decodeSyncSafeUint32(b)
+	}
+}
+
+func (c *codec24) scanString(tags tagList, v reflect.Value, enc Encoding) string {
+	var s string
+	if c.err != nil {
+		return s
+	}
+
+	if tags.Lookup("iso88519") {
+		enc = EncodingISO88591
+	}
+
+	if tags.Lookup("lang") {
+		s = c.consumeString(3, EncodingISO88591)
+	} else {
+		s = c.consumeNextString(enc)
+	}
+	if c.err != nil {
+		return s
+	}
+
+	v.SetString(s)
+	return s
+}
+
+func (c *codec24) scanStringSlice(tags tagList, v reflect.Value, enc Encoding) []string {
+	var ss []string
+	if c.err != nil {
+		return ss
+	}
+
+	ss = c.consumeStrings(enc)
+	if c.err != nil {
+		return ss
+	}
+	v.Set(reflect.ValueOf(ss))
+	return ss
+}
+
+func (c *codec24) scanByteSlice(tags tagList, v reflect.Value) []byte {
+	var b []byte
+	if c.err != nil {
+		return b
+	}
+
+	b = c.consumeAll()
+	v.Set(reflect.ValueOf(b))
+	return b
+}
+
+func (c *codec24) scanUint8(tags tagList, v reflect.Value, min uint8, max uint8) uint8 {
+	var e uint8
+	if c.err != nil {
+		return e
+	}
+
+	e = c.consumeByte()
+	if c.err != nil || e < min || e > max {
+		c.err = ErrInvalidFrame
+		return e
+	}
+
+	v.SetUint(uint64(e))
+	return e
+}
+
+func (c *codec24) EncodeFrame(t *Tag, f *Frame, w io.Writer) (int, error) {
+	return 0, ErrUnimplemented
 }
 
 func (c *codec24) consumeByte() byte {
@@ -273,123 +392,4 @@ func (c *codec24) consumeAll() []byte {
 	b := c.buf
 	c.buf = c.buf[:0]
 	return b
-}
-
-func (c *codec24) scanFrameHeader(h *FrameHeader) {
-	hdr := c.consumeBytes(10)
-	if c.err != nil {
-		c.err = ErrInvalidFrameHeader
-		return
-	}
-
-	h.ID = string(hdr[0:4])
-
-	var size uint32
-	size, c.err = decodeSyncSafeUint32(hdr[4:8])
-	if c.err != nil {
-		c.err = ErrInvalidFrameHeader
-		return
-	}
-	h.Size = int(size)
-
-	h.Flags = 0
-	flags := uint32(hdr[8])<<8 | uint32(hdr[9])
-	if flags != 0 {
-		h.Flags = FrameFlags(c.frameFlags.Decode(flags))
-
-		// If the frame is compressed, it must include a data length indicator.
-		if (h.Flags&FrameFlagCompressed) != 0 && (h.Flags&FrameFlagHasDataLength) == 0 {
-			c.err = ErrInvalidFrameFlags
-		}
-
-		if (h.Flags & FrameFlagHasGroupInfo) != 0 {
-			h.GroupID = GroupSymbol(c.consumeByte())
-			if c.err != nil || h.GroupID < 0x80 || h.GroupID > 0xf0 {
-				c.err = ErrInvalidFrameHeader
-			}
-		}
-
-		if (h.Flags & FrameFlagEncrypted) != 0 {
-			h.EncryptMethod = c.consumeByte()
-			if c.err != nil || h.EncryptMethod < 0x80 || h.EncryptMethod > 0xf0 {
-				c.err = ErrInvalidFrameHeader
-			}
-		}
-
-		if (h.Flags & FrameFlagHasDataLength) != 0 {
-			b := c.consumeBytes(4)
-			if c.err != nil {
-				c.err = ErrInvalidFrameHeader
-			}
-			h.DataLength, c.err = decodeSyncSafeUint32(b)
-		}
-	}
-}
-
-func (c *codec24) scanString(tags tagList, v reflect.Value, enc Encoding) string {
-	var s string
-	if c.err != nil {
-		return s
-	}
-
-	if tags.Lookup("iso88519") {
-		enc = EncodingISO88591
-	}
-
-	if tags.Lookup("lang") {
-		s = c.consumeString(3, EncodingISO88591)
-	} else {
-		s = c.consumeNextString(enc)
-	}
-	if c.err != nil {
-		return s
-	}
-
-	v.SetString(s)
-	return s
-}
-
-func (c *codec24) scanStringSlice(tags tagList, v reflect.Value, enc Encoding) []string {
-	var ss []string
-	if c.err != nil {
-		return ss
-	}
-
-	ss = c.consumeStrings(enc)
-	if c.err != nil {
-		return ss
-	}
-	v.Set(reflect.ValueOf(ss))
-	return ss
-}
-
-func (c *codec24) scanByteSlice(tags tagList, v reflect.Value) []byte {
-	var b []byte
-	if c.err != nil {
-		return b
-	}
-
-	b = c.consumeAll()
-	v.Set(reflect.ValueOf(b))
-	return b
-}
-
-func (c *codec24) scanUint8(tags tagList, v reflect.Value, min uint8, max uint8) uint8 {
-	var e uint8
-	if c.err != nil {
-		return e
-	}
-
-	e = c.consumeByte()
-	if c.err != nil || e < min || e > max {
-		c.err = ErrInvalidFrame
-		return e
-	}
-
-	v.SetUint(uint64(e))
-	return e
-}
-
-func (c *codec24) EncodeFrame(t *Tag, f *Frame, w io.Writer) (int, error) {
-	return 0, ErrUnimplemented
 }

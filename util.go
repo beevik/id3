@@ -97,6 +97,9 @@ type flagMap []struct {
 
 // Return the decoded representation of the encoded flags.
 func (f flagMap) Decode(flags uint32) uint32 {
+	if flags == 0 {
+		return 0
+	}
 	var result uint32
 	for _, e := range f {
 		if (e.encoded & flags) != 0 {
@@ -108,6 +111,9 @@ func (f flagMap) Decode(flags uint32) uint32 {
 
 // Return the encoded representation of the decoded flags.
 func (f flagMap) Encode(flags uint32) uint32 {
+	if flags == 0 {
+		return 0
+	}
 	var result uint32
 	for _, e := range f {
 		if (e.decoded & flags) != 0 {
