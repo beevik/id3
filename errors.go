@@ -21,6 +21,7 @@ var (
 	ErrInvalidFrameFlags    = errors.New("invalid frame flags")
 	ErrInvalidEncodedString = errors.New("invalid encoded string")
 	ErrUnknownFieldType     = errors.New("unknown field type")
+	ErrInvalidCRC           = errors.New("ID3 tag failed CRC check")
 	ErrUnimplemented        = errors.New("code path unimplemented")
 
 	errPaddingEncountered = errors.New("padding encountered")

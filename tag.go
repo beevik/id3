@@ -2,6 +2,7 @@ package id3
 
 import (
 	"bytes"
+	"hash/crc32"
 	"io"
 )
 
@@ -96,7 +97,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	}
 
 	// Create a new reader for the remaining tag data.
-	rb := bytes.NewReader(buf)
+	rb := bytes.NewBuffer(buf)
 
 	// Decode the extended header if it exists.
 	if (t.Flags & TagFlagExtended) != 0 {
@@ -104,6 +105,14 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 		nn += int64(n)
 		if err != nil {
 			return nn, err
+		}
+	}
+
+	// Check the CRC.
+	if (t.Flags & TagFlagHasCRC) != 0 {
+		crc := crc32.ChecksumIEEE(rb.Bytes())
+		if crc != t.CRC {
+			return nn, ErrInvalidCRC
 		}
 	}
 
