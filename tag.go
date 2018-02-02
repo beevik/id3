@@ -59,7 +59,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	}
 
 	// Make sure the tag id is "ID3".
-	if string(hdr[0:3]) != "ID3" {
+	if hdr[0] != 'I' || hdr[1] != 'D' || hdr[2] != '3' {
 		return nn, ErrInvalidTag
 	}
 
@@ -139,6 +139,23 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 		}
 
 		t.Frames = append(t.Frames, f)
+	}
+
+	// If there's a footer, validate it.
+	if (t.Flags & TagFlagFooter) != 0 {
+		footer := make([]byte, 10)
+		n, err = io.ReadFull(r, footer)
+		nn += int64(n)
+		if err != nil {
+			return nn, err
+		}
+
+		if footer[0] != '3' || footer[1] != 'D' || footer[2] != 'I' {
+			return nn, ErrInvalidFooter
+		}
+		if bytes.Compare(footer[3:], hdr[3:]) != 0 {
+			return nn, ErrInvalidFooter
+		}
 	}
 
 	return nn, nil

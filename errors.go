@@ -22,6 +22,7 @@ var (
 	ErrInvalidEncodedString = errors.New("invalid encoded string")
 	ErrUnknownFieldType     = errors.New("unknown field type")
 	ErrInvalidCRC           = errors.New("ID3 tag failed CRC check")
+	ErrInvalidFooter        = errors.New("invalid footer")
 	ErrUnimplemented        = errors.New("code path unimplemented")
 
 	errPaddingEncountered = errors.New("padding encountered")
