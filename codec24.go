@@ -10,9 +10,10 @@ import (
 //
 
 type codec24 struct {
-	payloadTypes typeMap // table of all frame payload types
-	headerFlags  flagMap // tag header flags
-	frameFlags   flagMap // frame header flags
+	payloadTypes typeMap   // table of all frame payload types
+	headerFlags  flagMap   // tag header flags
+	frameFlags   flagMap   // frame header flags
+	bounds       boundsMap // integer field bounds, by type
 }
 
 func newCodec24() *codec24 {
@@ -33,6 +34,11 @@ func newCodec24() *codec24 {
 			{1 << 2, uint32(FrameFlagEncrypted)},
 			{1 << 1, uint32(FrameFlagUnsynchronized)},
 			{1 << 0, uint32(FrameFlagHasDataLength)},
+		},
+		bounds: boundsMap{
+			"Encoding":    {0, 3},
+			"GroupSymbol": {0x80, 0xf0},
+			"PictureType": {0, 20},
 		},
 	}
 }
@@ -180,18 +186,13 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 			c.scanString(&s, tags, fieldValue, enc)
 
 		case reflect.Uint8:
-			switch field.Type.Name() {
-			case "frameID":
-				// Skip
-			case "Encoding":
-				enc = Encoding(c.scanUint8(&s, tags, fieldValue, 0, 3))
-			case "PictureType":
-				c.scanUint8(&s, tags, fieldValue, 0, 20)
-			case "GroupSymbol":
-				c.scanUint8(&s, tags, fieldValue, 0x80, 0xf0)
-			default:
-				s.err = ErrUnknownFieldType
+			v := c.scanUint8(&s, field, tags, fieldValue)
+			if field.Type.Name() == "Encoding" {
+				enc = Encoding(v)
 			}
+
+		case reflect.Uint16:
+			// skip (this is the frameId)
 
 		default:
 			s.err = ErrUnknownFieldType
@@ -287,14 +288,16 @@ func (c *codec24) scanByteSlice(s *scanner, tags tagList, v reflect.Value) []byt
 	return b
 }
 
-func (c *codec24) scanUint8(s *scanner, tags tagList, v reflect.Value, min uint8, max uint8) uint8 {
+func (c *codec24) scanUint8(s *scanner, field reflect.StructField, tags tagList, v reflect.Value) uint8 {
 	var e uint8
 	if s.err != nil {
 		return e
 	}
 
+	b, hasBounds := c.bounds[field.Type.Name()]
+
 	e = s.ConsumeByte()
-	if s.err != nil || e < min || e > max {
+	if s.err != nil || (hasBounds && (e < uint8(b.min) || e > uint8(b.max))) {
 		s.err = ErrInvalidFrame
 		return e
 	}

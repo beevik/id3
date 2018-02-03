@@ -122,3 +122,12 @@ func (f flagMap) Encode(flags uint32) uint32 {
 	}
 	return result
 }
+
+//
+// boundsMap
+//
+
+type boundsMap map[string]struct {
+	min int
+	max int
+}

@@ -83,7 +83,7 @@ var frameTypes = []reflect.Type{
 	reflect.TypeOf(FramePayloadGRID{}),
 }
 
-type frameID uint8
+type frameID uint16
 
 // FramePayloadUnknown contains the payload of any frame whose ID is
 // unknown to this package.
