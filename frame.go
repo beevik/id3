@@ -86,6 +86,7 @@ var frameTypes = []reflect.Type{
 	reflect.TypeOf(FramePayloadGRID{}),
 	reflect.TypeOf(FramePayloadPRIV{}),
 	reflect.TypeOf(FramePayloadPCNT{}),
+	reflect.TypeOf(FramePayloadPOPM{}),
 }
 
 type frameID uint16
@@ -198,4 +199,12 @@ type FramePayloadPRIV struct {
 type FramePayloadPCNT struct {
 	frameID frameID `v22:"CNT" v23:"PCNT" v24:"PCNT"`
 	Count   uint64  `id3:"counter"`
+}
+
+// FramePayloadPOPM tracks the "popularimeter" value for an MP3 file.
+type FramePayloadPOPM struct {
+	frameID frameID `v22:"POP" v23:"POPM" v24:"POPM"`
+	Email   string  `id3:"iso88519"`
+	Rating  uint8
+	Count   uint64 `id3:"counter"`
 }

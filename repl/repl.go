@@ -70,6 +70,8 @@ func main() {
 				fmt.Printf(": %s %v (%d bytes)", ff.Owner, ff.Data, len(ff.Data))
 			case *id3.FramePayloadPCNT:
 				fmt.Printf(": %d", ff.Count)
+			case *id3.FramePayloadPOPM:
+				fmt.Printf(": %s (%d) %d", ff.Email, ff.Rating, ff.Count)
 			}
 			fmt.Printf("\n")
 		}
