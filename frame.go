@@ -84,6 +84,7 @@ var frameTypes = []reflect.Type{
 	reflect.TypeOf(FramePayloadUSER{}),
 	reflect.TypeOf(FramePayloadUSLT{}),
 	reflect.TypeOf(FramePayloadGRID{}),
+	reflect.TypeOf(FramePayloadPRIV{}),
 }
 
 type frameID uint16
@@ -181,5 +182,13 @@ type FramePayloadGRID struct {
 	frameID frameID `v23:"GRID" v24:"GRID"`
 	Owner   string  `id3:"iso88519"`
 	GroupID GroupSymbol
+	Data    []byte
+}
+
+// FramePayloadPRIV contains private information specific to a software
+// producer.
+type FramePayloadPRIV struct {
+	frameID frameID `v23:"PRIV" v24:"PRIV"`
+	Owner   string  `id3:"iso88519"`
 	Data    []byte
 }

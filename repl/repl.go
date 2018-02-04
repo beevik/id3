@@ -64,6 +64,8 @@ func main() {
 				fmt.Printf(": %s -> %s", ff.Owner, ff.Identifier)
 			case *id3.FramePayloadUSLT:
 				fmt.Printf(": [%s:%s] %s", ff.Language, ff.Descriptor, ff.Text)
+			case *id3.FramePayloadPRIV:
+				fmt.Printf(": %s %v (%d bytes)", ff.Owner, ff.Data, len(ff.Data))
 			case *id3.FramePayloadUnknown:
 				fmt.Printf(": (%d bytes)", len(ff.Data))
 			}
