@@ -76,6 +76,7 @@ var frameTypes = []reflect.Type{
 	reflect.TypeOf(FramePayloadUnknown{}),
 	reflect.TypeOf(FramePayloadText{}),
 	reflect.TypeOf(FramePayloadTXXX{}),
+	reflect.TypeOf(FramePayloadCOMM{}),
 	reflect.TypeOf(FramePayloadURL{}),
 	reflect.TypeOf(FramePayloadWXXX{}),
 	reflect.TypeOf(FramePayloadAPIC{}),
@@ -108,6 +109,16 @@ type FramePayloadText struct {
 type FramePayloadTXXX struct {
 	frameID     frameID `v22:"TXX" v23:"TXXX" v24:"TXXX"`
 	Encoding    Encoding
+	Description string
+	Text        string
+}
+
+// FramePayloadCOMM contains a full-text comment that doesn't fit in any
+// of the other frames.
+type FramePayloadCOMM struct {
+	frameID     frameID `v22:"COM" v23:"COMM" v24:"COMM"`
+	Encoding    Encoding
+	Language    string `id3:"lang"`
 	Description string
 	Text        string
 }

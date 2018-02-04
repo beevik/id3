@@ -54,6 +54,8 @@ func main() {
 				fmt.Printf(": %s", strings.Join(ff.Text, " - "))
 			case *id3.FramePayloadTXXX:
 				fmt.Printf(": %s -> %s", ff.Description, ff.Text)
+			case *id3.FramePayloadCOMM:
+				fmt.Printf(": %s -> %s", ff.Description, ff.Text)
 			case *id3.FramePayloadURL:
 				fmt.Printf(": %s", ff.URL)
 			case *id3.FramePayloadWXXX:
