@@ -159,7 +159,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	}
 
 	// Select a frame payload type based on the ID.
-	typ := c.payloadTypes.Lookup(f.Header.ID)
+	typ := c.payloadTypes.Lookup24(f.Header.ID)
 
 	// Instantiate a new frame payload using reflection.
 	v := reflect.New(typ)

@@ -25,9 +25,12 @@ func newTypeMap(tag string) typeMap {
 	return m
 }
 
-func (m typeMap) Lookup(id string) reflect.Type {
-	if id[0] == 'T' {
+func (m typeMap) Lookup24(id string) reflect.Type {
+	if id[0] == 'T' && id != "TXXX" {
 		id = "T___"
+	}
+	if id[0] == 'W' && id != "WXXX" {
+		id = "W___"
 	}
 
 	if typ, ok := m[id]; ok {

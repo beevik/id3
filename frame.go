@@ -76,6 +76,8 @@ var frameTypes = []reflect.Type{
 	reflect.TypeOf(FramePayloadUnknown{}),
 	reflect.TypeOf(FramePayloadText{}),
 	reflect.TypeOf(FramePayloadTXXX{}),
+	reflect.TypeOf(FramePayloadURL{}),
+	reflect.TypeOf(FramePayloadWXXX{}),
 	reflect.TypeOf(FramePayloadAPIC{}),
 	reflect.TypeOf(FramePayloadUFID{}),
 	reflect.TypeOf(FramePayloadUSER{}),
@@ -108,6 +110,21 @@ type FramePayloadTXXX struct {
 	Encoding    Encoding
 	Description string
 	Text        string
+}
+
+// FramePayloadURL may contain the payload of any type of URL frame except
+// for the user-defined WXXX URL frame.
+type FramePayloadURL struct {
+	frameID frameID `v22:"W__" v23:"W___" v24:"W___"`
+	URL     string  `id3:"iso88519"`
+}
+
+// FramePayloadWXXX contains a custom URL payload.
+type FramePayloadWXXX struct {
+	frameID     frameID `v22:"WXX" v23:"WXXX" v24:"WXXXX"`
+	Encoding    Encoding
+	Description string
+	URL         string `id3:"iso88519"`
 }
 
 // FramePayloadAPIC contains the payload of an image frame.
