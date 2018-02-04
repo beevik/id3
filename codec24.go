@@ -167,26 +167,25 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	// Use the reflection type of the payload to process the frame's data.
 	enc := EncodingISO88591
 	for i := 0; i < typ.NumField(); i++ {
-		fieldValue := v.Elem().Field(i)
 		field := typ.Field(i)
-		kind := field.Type.Kind()
-		tags := getTags(field, "id3")
-		switch kind {
+		fieldValue := v.Elem().Field(i)
+
+		switch field.Type.Kind() {
 		case reflect.Slice:
 			switch field.Type.Elem().Kind() {
 			case reflect.Uint8:
-				c.scanByteSlice(&s, tags, fieldValue)
+				c.scanByteSlice(&s, fieldValue)
 			case reflect.String:
-				c.scanStringSlice(&s, tags, fieldValue, enc)
+				c.scanStringSlice(&s, fieldValue, enc)
 			default:
 				s.err = ErrUnknownFieldType
 			}
 
 		case reflect.String:
-			c.scanString(&s, tags, fieldValue, enc)
+			c.scanString(&s, field, fieldValue, enc)
 
 		case reflect.Uint8:
-			v := c.scanUint8(&s, field, tags, fieldValue)
+			v := c.scanUint8(&s, field, fieldValue)
 			if field.Type.Name() == "Encoding" {
 				enc = Encoding(v)
 			}
@@ -240,12 +239,13 @@ func (c *codec24) scanExtraHeaderData(s *scanner, h *FrameHeader) {
 	}
 }
 
-func (c *codec24) scanString(s *scanner, tags tagList, v reflect.Value, enc Encoding) string {
+func (c *codec24) scanString(s *scanner, field reflect.StructField, v reflect.Value, enc Encoding) string {
 	var str string
 	if s.err != nil {
 		return str
 	}
 
+	tags := getTags(field, "id3")
 	if tags.Lookup("iso88519") {
 		enc = EncodingISO88591
 	}
@@ -263,7 +263,7 @@ func (c *codec24) scanString(s *scanner, tags tagList, v reflect.Value, enc Enco
 	return str
 }
 
-func (c *codec24) scanStringSlice(s *scanner, tags tagList, v reflect.Value, enc Encoding) []string {
+func (c *codec24) scanStringSlice(s *scanner, v reflect.Value, enc Encoding) []string {
 	var ss []string
 	if s.err != nil {
 		return ss
@@ -277,7 +277,7 @@ func (c *codec24) scanStringSlice(s *scanner, tags tagList, v reflect.Value, enc
 	return ss
 }
 
-func (c *codec24) scanByteSlice(s *scanner, tags tagList, v reflect.Value) []byte {
+func (c *codec24) scanByteSlice(s *scanner, v reflect.Value) []byte {
 	var b []byte
 	if s.err != nil {
 		return b
@@ -288,7 +288,7 @@ func (c *codec24) scanByteSlice(s *scanner, tags tagList, v reflect.Value) []byt
 	return b
 }
 
-func (c *codec24) scanUint8(s *scanner, field reflect.StructField, tags tagList, v reflect.Value) uint8 {
+func (c *codec24) scanUint8(s *scanner, field reflect.StructField, v reflect.Value) uint8 {
 	var e uint8
 	if s.err != nil {
 		return e
