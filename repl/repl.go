@@ -48,6 +48,8 @@ func main() {
 		for _, f := range tag.Frames {
 			fmt.Printf("[size=0x%04x] %s", f.Header.Size+10, f.Header.ID)
 			switch ff := f.Payload.(type) {
+			case *id3.FramePayloadUnknown:
+				fmt.Printf(": (%d bytes)", len(ff.Data))
 			case *id3.FramePayloadAPIC:
 				fmt.Printf(": #%d %s[%s] (%d bytes)", ff.Type, ff.Description, ff.MimeType, len(ff.Data))
 			case *id3.FramePayloadText:
@@ -66,8 +68,8 @@ func main() {
 				fmt.Printf(": [%s:%s] %s", ff.Language, ff.Descriptor, ff.Text)
 			case *id3.FramePayloadPRIV:
 				fmt.Printf(": %s %v (%d bytes)", ff.Owner, ff.Data, len(ff.Data))
-			case *id3.FramePayloadUnknown:
-				fmt.Printf(": (%d bytes)", len(ff.Data))
+			case *id3.FramePayloadPCNT:
+				fmt.Printf(": %d", ff.Count)
 			}
 			fmt.Printf("\n")
 		}

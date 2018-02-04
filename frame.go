@@ -85,6 +85,7 @@ var frameTypes = []reflect.Type{
 	reflect.TypeOf(FramePayloadUSLT{}),
 	reflect.TypeOf(FramePayloadGRID{}),
 	reflect.TypeOf(FramePayloadPRIV{}),
+	reflect.TypeOf(FramePayloadPCNT{}),
 }
 
 type frameID uint16
@@ -191,4 +192,10 @@ type FramePayloadPRIV struct {
 	frameID frameID `v23:"PRIV" v24:"PRIV"`
 	Owner   string  `id3:"iso88519"`
 	Data    []byte
+}
+
+// FramePayloadPCNT tracks the number of times the MP3 file has been played.
+type FramePayloadPCNT struct {
+	frameID frameID `v22:"CNT" v23:"PCNT" v24:"PCNT"`
+	Count   uint64  `id3:"counter"`
 }

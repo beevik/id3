@@ -193,6 +193,9 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 		case reflect.Uint16:
 			// skip (this is the frameId)
 
+		case reflect.Uint64:
+			c.scanUint64(&s, field, fieldValue)
+
 		default:
 			s.err = ErrUnknownFieldType
 		}
@@ -289,21 +292,49 @@ func (c *codec24) scanByteSlice(s *scanner, v reflect.Value) []byte {
 }
 
 func (c *codec24) scanUint8(s *scanner, field reflect.StructField, v reflect.Value) uint8 {
-	var e uint8
+	var value uint8
 	if s.err != nil {
-		return e
+		return value
 	}
 
 	b, hasBounds := c.bounds[field.Type.Name()]
 
-	e = s.ConsumeByte()
-	if s.err != nil || (hasBounds && (e < uint8(b.min) || e > uint8(b.max))) {
+	value = s.ConsumeByte()
+	if s.err != nil || (hasBounds && (value < uint8(b.min) || value > uint8(b.max))) {
 		s.err = ErrInvalidFrame
-		return e
+		return value
 	}
 
-	v.SetUint(uint64(e))
-	return e
+	v.SetUint(uint64(value))
+	return value
+}
+
+func (c *codec24) scanUint64(s *scanner, field reflect.StructField, v reflect.Value) uint64 {
+	var value uint64
+	if s.err != nil {
+		return value
+	}
+
+	tags := getTags(field, "id3")
+
+	var buf []byte
+	if tags.Lookup("counter") {
+		buf = s.ConsumeAll()
+	} else {
+		buf = s.ConsumeBytes(8)
+	}
+
+	if s.err != nil {
+		s.err = ErrInvalidFrame
+		return value
+	}
+
+	for _, b := range buf {
+		value = (value << 8) | uint64(b)
+	}
+
+	v.SetUint(value)
+	return value
 }
 
 func (c *codec24) EncodeFrame(t *Tag, f *Frame, w io.Writer) (int, error) {
