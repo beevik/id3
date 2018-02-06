@@ -20,7 +20,7 @@ func newTypeMap(tag string) typeMap {
 		}
 
 		ff := ft.Field(0)
-		if ff.Name != "ID" {
+		if ff.Type.Name() != "FrameID" {
 			panic(errInvalidPayloadDef)
 		}
 

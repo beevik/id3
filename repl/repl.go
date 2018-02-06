@@ -11,6 +11,9 @@ import (
 
 func main() {
 
+	ff := id3.NewFrameHolder(id3.NewFrameComment("eng", "brett", "comment"))
+	_ = ff
+
 	flag.Parse()
 	args := flag.Args()
 	if len(args) == 0 {
@@ -45,38 +48,38 @@ func main() {
 			fmt.Printf("Pad: %d bytes\n", tag.Padding)
 		}
 
-		for _, f := range tag.Frames {
-			fmt.Printf("[size=0x%04x] %s", f.Header.Size+10, f.Header.ID)
-			switch ff := f.Payload.(type) {
-			case *id3.FramePayloadUnknown:
-				fmt.Printf(": (%d bytes)", len(ff.Data))
-			case *id3.FramePayloadAPIC:
-				fmt.Printf(": #%d %s[%s] (%d bytes)", ff.Type, ff.Description, ff.MimeType, len(ff.Data))
-			case *id3.FramePayloadText:
-				fmt.Printf(": %s", strings.Join(ff.Text, " - "))
-			case *id3.FramePayloadTXXX:
-				fmt.Printf(": %s -> %s", ff.Description, ff.Text)
-			case *id3.FramePayloadCOMM:
-				fmt.Printf(": %s -> %s", ff.Description, ff.Text)
-			case *id3.FramePayloadURL:
-				fmt.Printf(": %s", ff.URL)
-			case *id3.FramePayloadWXXX:
-				fmt.Printf(": %s -> %s", ff.Description, ff.URL)
-			case *id3.FramePayloadUFID:
-				fmt.Printf(": %s -> %s", ff.Owner, ff.Identifier)
-			case *id3.FramePayloadUSLT:
-				fmt.Printf(": [%s:%s] %s", ff.Language, ff.Descriptor, ff.Text)
-			case *id3.FramePayloadSYLT:
-				fmt.Printf(": [%s:%s] %d syncs", ff.Language, ff.Descriptor, len(ff.Sync))
-				for _, s := range ff.Sync {
+		for _, h := range tag.FrameHolders {
+			fmt.Printf("[size=0x%04x] %s", h.Size()+10, h.ID())
+			switch f := h.Frame.(type) {
+			case *id3.FrameUnknown:
+				fmt.Printf(": (%d bytes)", len(f.Data))
+			case *id3.FrameAttachedPicture:
+				fmt.Printf(": #%d %s[%s] (%d bytes)", f.Type, f.Description, f.MimeType, len(f.Data))
+			case *id3.FrameText:
+				fmt.Printf(": %s", strings.Join(f.Text, " - "))
+			case *id3.FrameTextCustom:
+				fmt.Printf(": %s -> %s", f.Description, f.Text)
+			case *id3.FrameComment:
+				fmt.Printf(": %s -> %s", f.Description, f.Text)
+			case *id3.FrameURL:
+				fmt.Printf(": %s", f.URL)
+			case *id3.FrameURLCustom:
+				fmt.Printf(": %s -> %s", f.Description, f.URL)
+			case *id3.FrameUniqueFileID:
+				fmt.Printf(": %s -> %s", f.Owner, f.Identifier)
+			case *id3.FrameLyricsUnsync:
+				fmt.Printf(": [%s:%s] %s", f.Language, f.Descriptor, f.Text)
+			case *id3.FrameLyricsSync:
+				fmt.Printf(": [%s:%s] %d syncs", f.Language, f.Descriptor, len(f.Sync))
+				for _, s := range f.Sync {
 					fmt.Printf("\n  %d: %s", s.TimeStamp, s.Text)
 				}
-			case *id3.FramePayloadPRIV:
-				fmt.Printf(": %s %v (%d bytes)", ff.Owner, ff.Data, len(ff.Data))
-			case *id3.FramePayloadPCNT:
-				fmt.Printf(": %d", ff.Count)
-			case *id3.FramePayloadPOPM:
-				fmt.Printf(": %s (%d) %d", ff.Email, ff.Rating, ff.Count)
+			case *id3.FramePrivate:
+				fmt.Printf(": %s %v (%d bytes)", f.Owner, f.Data, len(f.Data))
+			case *id3.FramePlayCount:
+				fmt.Printf(": %d", f.Count)
+			case *id3.FramePopularimeter:
+				fmt.Printf(": %s (%d) %d", f.Email, f.Rating, f.Count)
 			}
 			fmt.Printf("\n")
 		}

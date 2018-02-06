@@ -2,14 +2,34 @@ package id3
 
 import "reflect"
 
+// A FrameHolder holds the header and payload of an ID3 frame.
+type FrameHolder struct {
+	header FrameHeader
+	Frame  Frame
+}
+
+// NewFrameHolder creates a new frame holder, which contains the header
+// and payload of an ID3 frame.
+func NewFrameHolder(frame Frame) *FrameHolder {
+	t := reflect.ValueOf(frame).Elem()
+	return &FrameHolder{
+		header: FrameHeader{ID: FrameID(t.Field(0).String())},
+		Frame:  frame,
+	}
+}
+
+// Size returns the encoded size of the frame, not including the header.
+func (f *FrameHolder) Size() int {
+	return f.header.Size
+}
+
+// ID returns the 4-character ID string currently assigned to the frame.
+func (f *FrameHolder) ID() FrameID {
+	return f.header.ID
+}
+
 // A FrameID is a 4-character string indicating the type of ID3 frame.
 type FrameID string
-
-// A Frame holds an entire ID3 frame including its header and payload.
-type Frame struct {
-	Header  FrameHeader
-	Payload FramePayload
-}
 
 // A FrameHeader holds the data described by a frame header.
 type FrameHeader struct {
@@ -19,10 +39,6 @@ type FrameHeader struct {
 	GroupID       GroupSymbol // Optional group identifier
 	EncryptMethod uint8       // Optional encryption method identifier
 	DataLength    uint32      // Optional data length (if FrameFlagHasDataLength is set)
-}
-
-// A FramePayload describes the data held within a frame's payload.
-type FramePayload interface {
 }
 
 // FrameFlags describe flags that may appear within a FrameHeader. Not all
@@ -101,54 +117,68 @@ const (
 // is described futher in GRID frames.
 type GroupSymbol byte
 
-// frameTypes holds all possible frame payload types supported by ID3.
-var frameTypes = []reflect.Type{
-	reflect.TypeOf(FramePayloadUnknown{}),
-	reflect.TypeOf(FramePayloadText{}),
-	reflect.TypeOf(FramePayloadTXXX{}),
-	reflect.TypeOf(FramePayloadCOMM{}),
-	reflect.TypeOf(FramePayloadURL{}),
-	reflect.TypeOf(FramePayloadWXXX{}),
-	reflect.TypeOf(FramePayloadAPIC{}),
-	reflect.TypeOf(FramePayloadUFID{}),
-	reflect.TypeOf(FramePayloadUSER{}),
-	reflect.TypeOf(FramePayloadUSLT{}),
-	reflect.TypeOf(FramePayloadSYLT{}),
-	reflect.TypeOf(FramePayloadSYTC{}),
-	reflect.TypeOf(FramePayloadGRID{}),
-	reflect.TypeOf(FramePayloadPRIV{}),
-	reflect.TypeOf(FramePayloadPCNT{}),
-	reflect.TypeOf(FramePayloadPOPM{}),
+// A Frame is an interface capable of representing the payload of any of the
+// possible frame types (e.g., FrameText, FrameURL, etc.).
+//
+// Use a type assertion to access the frame's contents. For example:
+//
+//	for _, h := range tag.FrameHolders {
+//		switch f := h.Frame.(type) {
+// 			case *id3.FrameText:
+// 				fmt.Printf("%v\n", f.Text)
+//			case *id3.FrameURL:
+//				fmt.Printf("%s\n", f.URL)
+//		}
+//	}
+type Frame interface {
 }
 
-// FramePayloadUnknown contains the payload of any frame whose ID is
+// FrameUnknown contains the payload of any frame whose ID is
 // unknown to this package.
-type FramePayloadUnknown struct {
+type FrameUnknown struct {
 	ID   FrameID `v23:"????" v24:"????"`
 	Data []byte
 }
 
-// FramePayloadText may contain the payload of any type of text frame
+// FrameText may contain the payload of any type of text frame
 // except for a user-defined TXXX text frame.  In v2.4, each text frame
 // may contain one or more text strings.  In all other versions, only one
 // text string may appear.
-type FramePayloadText struct {
+type FrameText struct {
 	ID       FrameID `v22:"T__" v23:"T___" v24:"T___"`
 	Encoding Encoding
 	Text     []string
 }
 
-// FramePayloadTXXX contains a custom text payload.
-type FramePayloadTXXX struct {
+// NewFrameText creates a new text frame payload.
+func NewFrameText(id FrameID, text string) *FrameText {
+	return &FrameText{
+		ID:       id,
+		Encoding: EncodingUTF8,
+		Text:     []string{text},
+	}
+}
+
+// FrameTextCustom contains a custom text payload.
+type FrameTextCustom struct {
 	ID          FrameID `v22:"TXX" v23:"TXXX" v24:"TXXX"`
 	Encoding    Encoding
 	Description string
 	Text        string
 }
 
-// FramePayloadCOMM contains a full-text comment that doesn't fit in any
-// of the other frames.
-type FramePayloadCOMM struct {
+// NewFrameTextCustom creates a new custom text frame payload.
+func NewFrameTextCustom(description, text string) *FrameTextCustom {
+	return &FrameTextCustom{
+		ID:          "TXXX",
+		Encoding:    EncodingUTF8,
+		Description: description,
+		Text:        text,
+	}
+}
+
+// FrameComment contains a full-text comment field.
+type FrameComment struct {
 	ID          FrameID `v22:"COM" v23:"COMM" v24:"COMM"`
 	Encoding    Encoding
 	Language    string `id3:"lang"`
@@ -156,23 +186,34 @@ type FramePayloadCOMM struct {
 	Text        string
 }
 
-// FramePayloadURL may contain the payload of any type of URL frame except
+// NewFrameComment creates a new full-text comment frame.
+func NewFrameComment(language, description, text string) *FrameComment {
+	return &FrameComment{
+		ID:          "COMM",
+		Encoding:    EncodingUTF8,
+		Language:    language,
+		Description: description,
+		Text:        text,
+	}
+}
+
+// FrameURL may contain the payload of any type of URL frame except
 // for the user-defined WXXX URL frame.
-type FramePayloadURL struct {
+type FrameURL struct {
 	ID  FrameID `v22:"W__" v23:"W___" v24:"W___"`
 	URL string  `id3:"iso88519"`
 }
 
-// FramePayloadWXXX contains a custom URL payload.
-type FramePayloadWXXX struct {
+// FrameURLCustom contains a custom URL payload.
+type FrameURLCustom struct {
 	ID          FrameID `v22:"WXX" v23:"WXXX" v24:"WXXXX"`
 	Encoding    Encoding
 	Description string
 	URL         string `id3:"iso88519"`
 }
 
-// FramePayloadAPIC contains the payload of an image frame.
-type FramePayloadAPIC struct {
+// FrameAttachedPicture contains the payload of an image frame.
+type FrameAttachedPicture struct {
 	ID          FrameID `v22:"PIC" v23:"APIC" v24:"APIC"`
 	Encoding    Encoding
 	MimeType    string `id3:"iso88519"`
@@ -181,24 +222,24 @@ type FramePayloadAPIC struct {
 	Data        []byte
 }
 
-// FramePayloadUFID contains a unique file identifier for the MP3.
-type FramePayloadUFID struct {
+// FrameUniqueFileID contains a unique file identifier for the MP3.
+type FrameUniqueFileID struct {
 	ID         FrameID `v22:"UFI" v23:"UFID" v24:"UFID"`
 	Owner      string  `id3:"iso88519"`
 	Identifier string  `id3:"iso88519"`
 }
 
-// FramePayloadUSER contains the terms of use description for the MP3.
-type FramePayloadUSER struct {
+// FrameTermsOfUse contains the terms of use description for the MP3.
+type FrameTermsOfUse struct {
 	ID       FrameID `v23:"USER" v24:"USER"`
 	Encoding Encoding
 	Language string `id3:"lang"`
 	Text     string
 }
 
-// FramePayloadUSLT contains unsynchronized lyrics and text transcription
+// FrameLyricsUnsync contains unsynchronized lyrics and text transcription
 // data.
-type FramePayloadUSLT struct {
+type FrameLyricsUnsync struct {
 	ID         FrameID `v22:"ULT" v23:"USLT" v24:"USLT"`
 	Encoding   Encoding
 	Language   string `id3:"lang"`
@@ -213,8 +254,8 @@ type LyricSync struct {
 	TimeStamp uint32
 }
 
-// FramePayloadSYLT contains synchronized lyrics or text information.
-type FramePayloadSYLT struct {
+// FrameLyricsSync contains synchronized lyrics or text information.
+type FrameLyricsSync struct {
 	ID              FrameID `v22:"SLT" v23:"SYLT" v24:"SYLT"`
 	Encoding        Encoding
 	Language        string `id3:"lang"`
@@ -230,42 +271,62 @@ type TempoSync struct {
 	TimeStamp uint32
 }
 
-// FramePayloadSYTC contains synchronized tempo codes.
-type FramePayloadSYTC struct {
+// FrameSyncTempoCodes contains synchronized tempo codes.
+type FrameSyncTempoCodes struct {
 	ID              FrameID `v22:"STC" v23:"SYTC" v24:"SYTC"`
 	TimeStampFormat TimeStampFormat
 	Sync            []TempoSync
 }
 
-// FramePayloadGRID contains information describing the grouping of
+// FrameGroupID contains information describing the grouping of
 // otherwise unrelated frames. If a frame contains an optional group
 // identifier, there will be a corresponding GRID frame with data
 // describing the group.
-type FramePayloadGRID struct {
+type FrameGroupID struct {
 	ID      FrameID `v23:"GRID" v24:"GRID"`
 	Owner   string  `id3:"iso88519"`
 	GroupID GroupSymbol
 	Data    []byte
 }
 
-// FramePayloadPRIV contains private information specific to a software
+// FramePrivate contains private information specific to a software
 // producer.
-type FramePayloadPRIV struct {
+type FramePrivate struct {
 	ID    FrameID `v23:"PRIV" v24:"PRIV"`
 	Owner string  `id3:"iso88519"`
 	Data  []byte
 }
 
-// FramePayloadPCNT tracks the number of times the MP3 file has been played.
-type FramePayloadPCNT struct {
+// FramePlayCount tracks the number of times the MP3 file has been played.
+type FramePlayCount struct {
 	ID    FrameID `v22:"CNT" v23:"PCNT" v24:"PCNT"`
 	Count uint64  `id3:"counter"`
 }
 
-// FramePayloadPOPM tracks the "popularimeter" value for an MP3 file.
-type FramePayloadPOPM struct {
+// FramePopularimeter tracks the "popularimeter" value for an MP3 file.
+type FramePopularimeter struct {
 	ID     FrameID `v22:"POP" v23:"POPM" v24:"POPM"`
 	Email  string  `id3:"iso88519"`
 	Rating uint8
 	Count  uint64 `id3:"counter"`
+}
+
+// frameTypes holds all possible frame payload types supported by ID3.
+var frameTypes = []reflect.Type{
+	reflect.TypeOf(FrameUnknown{}),
+	reflect.TypeOf(FrameText{}),
+	reflect.TypeOf(FrameTextCustom{}),
+	reflect.TypeOf(FrameComment{}),
+	reflect.TypeOf(FrameURL{}),
+	reflect.TypeOf(FrameURLCustom{}),
+	reflect.TypeOf(FrameAttachedPicture{}),
+	reflect.TypeOf(FrameUniqueFileID{}),
+	reflect.TypeOf(FrameTermsOfUse{}),
+	reflect.TypeOf(FrameLyricsUnsync{}),
+	reflect.TypeOf(FrameLyricsSync{}),
+	reflect.TypeOf(FrameSyncTempoCodes{}),
+	reflect.TypeOf(FrameGroupID{}),
+	reflect.TypeOf(FramePrivate{}),
+	reflect.TypeOf(FramePlayCount{}),
+	reflect.TypeOf(FramePopularimeter{}),
 }
