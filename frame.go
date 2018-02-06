@@ -66,6 +66,33 @@ const (
 	PictureTypePublisherLogotype
 )
 
+// TimeStampFormat indicates the type of time stamp used: milliseconds or
+// MPEG frame.
+type TimeStampFormat byte
+
+// All possible values of the TimeStampFormat type.
+const (
+	TimeStampFrames TimeStampFormat = 1 + iota
+	TimeStampMilliseconds
+)
+
+// LyricContentType indicates type type of lyrics stored in a synchronized
+// lyric frame.
+type LyricContentType byte
+
+// All possible values of the LyricContentType type.
+const (
+	LyricContentTypeOther LyricContentType = iota
+	LyricContentTypeLyrics
+	LyricContentTypeTranscription
+	LyricContentTypeMovement
+	LyricContentTypeEvents
+	LyricContentTypeChord
+	LyricContentTypeTrivia
+	LyricContentTypeWebURL
+	LyricContentTypeImageURL
+)
+
 // A GroupSymbol is a value between 0x80 and 0xF0 that uniquely identifies
 // a grouped set of frames. The data associated with each GroupSymbol value
 // is described futher in GRID frames.
@@ -83,6 +110,7 @@ var frameTypes = []reflect.Type{
 	reflect.TypeOf(FramePayloadUFID{}),
 	reflect.TypeOf(FramePayloadUSER{}),
 	reflect.TypeOf(FramePayloadUSLT{}),
+	reflect.TypeOf(FramePayloadSYLT{}),
 	reflect.TypeOf(FramePayloadGRID{}),
 	reflect.TypeOf(FramePayloadPRIV{}),
 	reflect.TypeOf(FramePayloadPCNT{}),
@@ -174,6 +202,24 @@ type FramePayloadUSLT struct {
 	Language   string `id3:"lang"`
 	Descriptor string
 	Text       string
+}
+
+// LyricSync describes a single syllable or event within a synchronized
+// lyric or text frame (SYLT).
+type LyricSync struct {
+	Text      string
+	TimeStamp uint32
+}
+
+// FramePayloadSYLT contains synchronized lyrics or text information.
+type FramePayloadSYLT struct {
+	frameID         frameID `v22:"SLT" v23:"SYLT" v24:"SYLT"`
+	Encoding        Encoding
+	Language        string `id3:"lang"`
+	TimeStampFormat TimeStampFormat
+	ContentType     LyricContentType
+	Descriptor      string
+	Sync            []LyricSync
 }
 
 // FramePayloadGRID contains information describing the grouping of

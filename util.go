@@ -72,8 +72,8 @@ func (t tagList) Lookup(s string) bool {
 var emptyTagList = make(tagList)
 
 // Return a table of all tags on a struct field.
-func getTags(f reflect.StructField, key string) tagList {
-	tag, ok := f.Tag.Lookup(key)
+func getTags(t reflect.StructTag, key string) tagList {
+	tag, ok := t.Lookup(key)
 	if !ok {
 		return emptyTagList
 	}

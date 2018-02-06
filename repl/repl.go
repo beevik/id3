@@ -66,6 +66,11 @@ func main() {
 				fmt.Printf(": %s -> %s", ff.Owner, ff.Identifier)
 			case *id3.FramePayloadUSLT:
 				fmt.Printf(": [%s:%s] %s", ff.Language, ff.Descriptor, ff.Text)
+			case *id3.FramePayloadSYLT:
+				fmt.Printf(": [%s:%s] %d syncs", ff.Language, ff.Descriptor, len(ff.Sync))
+				for _, s := range ff.Sync {
+					fmt.Printf("\n  %d: %s", s.TimeStamp, s.Text)
+				}
 			case *id3.FramePayloadPRIV:
 				fmt.Printf(": %s %v (%d bytes)", ff.Owner, ff.Data, len(ff.Data))
 			case *id3.FramePayloadPCNT:

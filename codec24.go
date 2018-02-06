@@ -36,11 +36,27 @@ func newCodec24() *codec24 {
 			{1 << 0, uint32(FrameFlagHasDataLength)},
 		},
 		bounds: boundsMap{
-			"Encoding":    {0, 3},
-			"GroupSymbol": {0x80, 0xf0},
-			"PictureType": {0, 20},
+			"Encoding":         {0, 3},
+			"GroupSymbol":      {0x80, 0xf0},
+			"PictureType":      {0, 20},
+			"TimeStampFormat":  {1, 2},
+			"LyricContentType": {0, 8},
 		},
 	}
+}
+
+// A property holds the reflection data necessary to update a property's
+// value. Usually the property is a struct field.
+type property struct {
+	typ   reflect.Type
+	tags  tagList
+	value reflect.Value
+}
+
+// The state structure keeps track of persistent state required while
+// decoding a single frame.
+type state struct {
+	encoding Encoding
 }
 
 func (c *codec24) HeaderFlags() flagMap {
@@ -161,48 +177,22 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	// Select a frame payload type based on the ID.
 	typ := c.payloadTypes.Lookup24(f.Header.ID)
 
-	// Instantiate a new frame payload using reflection.
-	v := reflect.New(typ)
-
-	// Use the reflection type of the payload to process the frame's data.
-	enc := EncodingISO88591
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		fieldValue := v.Elem().Field(i)
-
-		switch field.Type.Kind() {
-		case reflect.Slice:
-			switch field.Type.Elem().Kind() {
-			case reflect.Uint8:
-				c.scanByteSlice(&s, fieldValue)
-			case reflect.String:
-				c.scanStringSlice(&s, fieldValue, enc)
-			default:
-				s.err = ErrUnknownFieldType
-			}
-
-		case reflect.String:
-			c.scanString(&s, field, fieldValue, enc)
-
-		case reflect.Uint8:
-			v := c.scanUint8(&s, field, fieldValue)
-			if field.Type.Name() == "Encoding" {
-				enc = Encoding(v)
-			}
-
-		case reflect.Uint16:
-			// skip (this is the frameId)
-
-		case reflect.Uint64:
-			c.scanUint64(&s, field, fieldValue)
-
-		default:
-			s.err = ErrUnknownFieldType
-		}
+	// Initialize the scan state.
+	state := state{
+		encoding: EncodingISO88591,
 	}
 
+	// Scan the payload structure.
+	p := property{
+		typ:   typ,
+		tags:  emptyTagList,
+		value: reflect.New(typ),
+	}
+	c.scanStruct(&s, p, &state)
+
+	// Retrieve the interface.
 	if s.err == nil {
-		f.Payload = v.Interface().(FramePayload)
+		f.Payload = p.value.Interface().(FramePayload)
 	}
 
 	return s.n, s.err
@@ -242,83 +232,169 @@ func (c *codec24) scanExtraHeaderData(s *scanner, h *FrameHeader) {
 	}
 }
 
-func (c *codec24) scanString(s *scanner, field reflect.StructField, v reflect.Value, enc Encoding) string {
-	var str string
+func (c *codec24) scanStruct(s *scanner, p property, state *state) {
+	for i := 0; i < p.typ.NumField(); i++ {
+		field := p.typ.Field(i)
+
+		pp := property{
+			typ:   field.Type,
+			tags:  getTags(field.Tag, "id3"),
+			value: p.value.Elem().Field(i),
+		}
+
+		switch field.Type.Kind() {
+		case reflect.Uint8:
+			c.scanUint8(s, pp, state)
+
+		case reflect.Uint16:
+			// skip (this is the frameId)
+
+		case reflect.Uint32:
+			c.scanUint32(s, pp, state)
+
+		case reflect.Uint64:
+			c.scanUint64(s, pp, state)
+
+		case reflect.Slice:
+			switch field.Type.Elem().Kind() {
+			case reflect.Uint8:
+				c.scanByteSlice(s, pp, state)
+			case reflect.String:
+				c.scanStringSlice(s, pp, state)
+			case reflect.Struct:
+				c.scanStructSlice(s, pp, state)
+			default:
+				s.err = ErrUnknownFieldType
+			}
+
+		case reflect.String:
+			c.scanString(s, pp, state)
+
+		case reflect.Struct:
+			c.scanStruct(s, pp, state)
+
+		default:
+			s.err = ErrUnknownFieldType
+		}
+	}
+}
+
+func (c *codec24) scanString(s *scanner, p property, state *state) {
 	if s.err != nil {
-		return str
+		return
 	}
 
-	tags := getTags(field, "id3")
-	if tags.Lookup("iso88519") {
+	enc := state.encoding
+
+	if p.tags.Lookup("iso88519") {
 		enc = EncodingISO88591
 	}
 
-	if tags.Lookup("lang") {
+	var str string
+	if p.tags.Lookup("lang") {
 		str = s.ConsumeFixedLenString(3, EncodingISO88591)
 	} else {
 		str = s.ConsumeNextString(enc)
 	}
 	if s.err != nil {
-		return str
+		return
 	}
 
-	v.SetString(str)
-	return str
+	p.value.SetString(str)
 }
 
-func (c *codec24) scanStringSlice(s *scanner, v reflect.Value, enc Encoding) []string {
-	var ss []string
+func (c *codec24) scanByteSlice(s *scanner, p property, state *state) {
 	if s.err != nil {
-		return ss
+		return
 	}
 
-	ss = s.ConsumeStrings(enc)
-	if s.err != nil {
-		return ss
-	}
-	v.Set(reflect.ValueOf(ss))
-	return ss
+	b := s.ConsumeAll()
+	p.value.Set(reflect.ValueOf(b))
 }
 
-func (c *codec24) scanByteSlice(s *scanner, v reflect.Value) []byte {
-	var b []byte
+func (c *codec24) scanStringSlice(s *scanner, p property, state *state) {
 	if s.err != nil {
-		return b
+		return
 	}
 
-	b = s.ConsumeAll()
-	v.Set(reflect.ValueOf(b))
-	return b
+	ss := s.ConsumeStrings(state.encoding)
+	if s.err != nil {
+		return
+	}
+	p.value.Set(reflect.ValueOf(ss))
 }
 
-func (c *codec24) scanUint8(s *scanner, field reflect.StructField, v reflect.Value) uint8 {
-	var value uint8
+func (c *codec24) scanStructSlice(s *scanner, p property, state *state) {
 	if s.err != nil {
-		return value
+		return
 	}
 
-	b, hasBounds := c.bounds[field.Type.Name()]
+	elems := make([]reflect.Value, 0, 1)
+	for s.Len() > 0 {
+		etyp := p.typ.Elem()
+		ep := property{
+			typ:   etyp,
+			tags:  emptyTagList,
+			value: reflect.New(etyp),
+		}
 
-	value = s.ConsumeByte()
+		c.scanStruct(s, ep, state)
+		if s.err != nil {
+			return
+		}
+
+		elems = append(elems, ep.value)
+	}
+
+	slice := reflect.MakeSlice(p.typ, len(elems), len(elems))
+	for i := range elems {
+		slice.Index(i).Set(elems[i].Elem())
+	}
+	p.value.Set(slice)
+}
+
+func (c *codec24) scanUint8(s *scanner, p property, state *state) {
+	if s.err != nil {
+		return
+	}
+
+	b, hasBounds := c.bounds[p.typ.Name()]
+
+	value := s.ConsumeByte()
 	if s.err != nil || (hasBounds && (value < uint8(b.min) || value > uint8(b.max))) {
 		s.err = ErrInvalidFrame
-		return value
+		return
 	}
 
-	v.SetUint(uint64(value))
-	return value
+	if p.typ.Name() == "Encoding" {
+		state.encoding = Encoding(value)
+	}
+
+	p.value.SetUint(uint64(value))
 }
 
-func (c *codec24) scanUint64(s *scanner, field reflect.StructField, v reflect.Value) uint64 {
-	var value uint64
+func (c *codec24) scanUint32(s *scanner, p property, state *state) {
 	if s.err != nil {
-		return value
+		return
 	}
 
-	tags := getTags(field, "id3")
+	buf := s.ConsumeBytes(4)
+
+	var value uint64
+	for _, b := range buf {
+		value = (value << 8) | uint64(b)
+	}
+
+	p.value.SetUint(value)
+}
+
+func (c *codec24) scanUint64(s *scanner, p property, state *state) {
+	if s.err != nil {
+		return
+	}
 
 	var buf []byte
-	if tags.Lookup("counter") {
+	if p.tags.Lookup("counter") {
 		buf = s.ConsumeAll()
 	} else {
 		buf = s.ConsumeBytes(8)
@@ -326,15 +402,15 @@ func (c *codec24) scanUint64(s *scanner, field reflect.StructField, v reflect.Va
 
 	if s.err != nil {
 		s.err = ErrInvalidFrame
-		return value
+		return
 	}
 
+	var value uint64
 	for _, b := range buf {
 		value = (value << 8) | uint64(b)
 	}
 
-	v.SetUint(value)
-	return value
+	p.value.SetUint(value)
 }
 
 func (c *codec24) EncodeFrame(t *Tag, f *Frame, w io.Writer) (int, error) {

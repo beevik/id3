@@ -11,6 +11,10 @@ type scanner struct {
 	err error
 }
 
+func (s *scanner) Len() int {
+	return len(s.buf)
+}
+
 func (s *scanner) Read(r io.Reader, n int) {
 	s.buf = make([]byte, n)
 	_, s.err = io.ReadFull(r, s.buf)
