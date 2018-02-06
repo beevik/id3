@@ -111,6 +111,7 @@ var frameTypes = []reflect.Type{
 	reflect.TypeOf(FramePayloadUSER{}),
 	reflect.TypeOf(FramePayloadUSLT{}),
 	reflect.TypeOf(FramePayloadSYLT{}),
+	reflect.TypeOf(FramePayloadSYTC{}),
 	reflect.TypeOf(FramePayloadGRID{}),
 	reflect.TypeOf(FramePayloadPRIV{}),
 	reflect.TypeOf(FramePayloadPCNT{}),
@@ -220,6 +221,19 @@ type FramePayloadSYLT struct {
 	ContentType     LyricContentType
 	Descriptor      string
 	Sync            []LyricSync
+}
+
+// TempoSync describes a tempo change.
+type TempoSync struct {
+	BPM       uint16 `id3:"tempo"`
+	TimeStamp uint32
+}
+
+// FramePayloadSYTC contains synchronized tempo codes.
+type FramePayloadSYTC struct {
+	frameID         frameID `v22:"STC" v23:"SYTC" v24:"SYTC"`
+	TimeStampFormat TimeStampFormat
+	Sync            []TempoSync
 }
 
 // FramePayloadGRID contains information describing the grouping of

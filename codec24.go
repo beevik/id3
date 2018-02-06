@@ -247,7 +247,7 @@ func (c *codec24) scanStruct(s *scanner, p property, state *state) {
 			c.scanUint8(s, pp, state)
 
 		case reflect.Uint16:
-			// skip (this is the frameId)
+			c.scanUint16(s, pp, state)
 
 		case reflect.Uint32:
 			c.scanUint32(s, pp, state)
@@ -368,6 +368,33 @@ func (c *codec24) scanUint8(s *scanner, p property, state *state) {
 
 	if p.typ.Name() == "Encoding" {
 		state.encoding = Encoding(value)
+	}
+
+	p.value.SetUint(uint64(value))
+}
+
+func (c *codec24) scanUint16(s *scanner, p property, state *state) {
+	if s.err != nil {
+		return
+	}
+
+	// Ignore frame id fields.
+	if p.typ.Name() == "frameID" {
+		return
+	}
+
+	var value uint16
+	if p.tags.Lookup("tempo") {
+		value = uint16(s.ConsumeByte())
+		if value == 0xff {
+			value += uint16(s.ConsumeByte())
+		}
+	} else {
+		b := s.ConsumeBytes(2)
+		value = uint16(b[0])<<8 | uint16(b[1])
+	}
+	if s.err != nil {
+		return
 	}
 
 	p.value.SetUint(uint64(value))
