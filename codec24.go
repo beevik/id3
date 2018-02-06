@@ -27,55 +27,55 @@ var v24FrameFlags = flagMap{
 	{1 << 0, uint32(FrameFlagHasDataLength)},
 }
 
-var v24FrameIDToTextType = stringMap{
-	"TIT1": int(TextTypeGroupDescription),
-	"TIT2": int(TextTypeSongTitle),
-	"TIT3": int(TextTypeSongSubtitle),
-	"TALB": int(TextTypeAlbumName),
-	"TOAL": int(TextTypeOriginalAlbum),
-	"TRCK": int(TextTypeTrackNumber),
-	"TPOS": int(TextTypePartOfSet),
-	"TSST": int(TextTypeSetSubtitle),
-	"TSRC": int(TextTypeISRC),
-	"TPE1": int(TextTypeArtist),
-	"TPE2": int(TextTypeAlbumArtist),
-	"TPE3": int(TextTypeConductor),
-	"TPE4": int(TextTypeRemixer),
-	"TOPE": int(TextTypeOriginalPerformer),
-	"TEXT": int(TextTypeLyricist),
-	"TOLY": int(TextTypeOriginalLyricist),
-	"TCOM": int(TextTypeComposer),
-	"TMCL": int(TextTypeMusicians),
-	"TIPL": int(TextTypeInvolvedPeople),
-	"TENC": int(TextTypeEncodedBy),
-	"TBPM": int(TextTypeBPM),
-	"TLEN": int(TextTypeLengthInMs),
-	"TKEY": int(TextTypeMusicalKey),
-	"TLAN": int(TextTypeLanguage),
-	"TCON": int(TextTypeGenre),
-	"TFLT": int(TextTypeFileType),
-	"TMED": int(TextTypeMediaType),
-	"TMOO": int(TextTypeMood),
-	"TCOP": int(TextTypeCopyright),
-	"TPRO": int(TextTypeProducedNotice),
-	"TPUB": int(TextTypePublisher),
-	"TOWN": int(TextTypeOwner),
-	"TRSN": int(TextTypeRadioStation),
-	"TRSO": int(TextTypeRadioStationOwner),
-	"TOFN": int(TextTypeOriginalFileName),
-	"TDLY": int(TextTypePlaylistDelay),
-	"TDEN": int(TextTypeEncodingTime),
-	"TDOR": int(TextTypeOriginalReleaseTime),
-	"TDRC": int(TextTypeRecordingTime),
-	"TDRL": int(TextTypeReleaseTime),
-	"TDTG": int(TextTypeTaggingTime),
-	"TSSE": int(TextTypeEncodingSoftware),
-	"TSOA": int(TextTypeAlbumSortOrder),
-	"TSOT": int(TextTypeTitleSortOrder),
-	"TUNK": int(TextTypeUnknown),
+var v24TextTypeToFrameID = intToStringMap{
+	int(TextTypeGroupDescription):    "TIT1",
+	int(TextTypeSongTitle):           "TIT2",
+	int(TextTypeSongSubtitle):        "TIT3",
+	int(TextTypeAlbumName):           "TALB",
+	int(TextTypeOriginalAlbum):       "TOAL",
+	int(TextTypeTrackNumber):         "TRCK",
+	int(TextTypePartOfSet):           "TPOS",
+	int(TextTypeSetSubtitle):         "TSST",
+	int(TextTypeISRC):                "TSRC",
+	int(TextTypeArtist):              "TPE1",
+	int(TextTypeAlbumArtist):         "TPE2",
+	int(TextTypeConductor):           "TPE3",
+	int(TextTypeRemixer):             "TPE4",
+	int(TextTypeOriginalPerformer):   "TOPE",
+	int(TextTypeLyricist):            "TEXT",
+	int(TextTypeOriginalLyricist):    "TOLY",
+	int(TextTypeComposer):            "TCOM",
+	int(TextTypeMusicians):           "TMCL",
+	int(TextTypeInvolvedPeople):      "TIPL",
+	int(TextTypeEncodedBy):           "TENC",
+	int(TextTypeBPM):                 "TBPM",
+	int(TextTypeLengthInMs):          "TLEN",
+	int(TextTypeMusicalKey):          "TKEY",
+	int(TextTypeLanguage):            "TLAN",
+	int(TextTypeGenre):               "TCON",
+	int(TextTypeFileType):            "TFLT",
+	int(TextTypeMediaType):           "TMED",
+	int(TextTypeMood):                "TMOO",
+	int(TextTypeCopyright):           "TCOP",
+	int(TextTypeProducedNotice):      "TPRO",
+	int(TextTypePublisher):           "TPUB",
+	int(TextTypeOwner):               "TOWN",
+	int(TextTypeRadioStation):        "TRSN",
+	int(TextTypeRadioStationOwner):   "TRSO",
+	int(TextTypeOriginalFileName):    "TOFN",
+	int(TextTypePlaylistDelay):       "TDLY",
+	int(TextTypeEncodingTime):        "TDEN",
+	int(TextTypeOriginalReleaseTime): "TDOR",
+	int(TextTypeRecordingTime):       "TDRC",
+	int(TextTypeReleaseTime):         "TDRL",
+	int(TextTypeTaggingTime):         "TDTG",
+	int(TextTypeEncodingSoftware):    "TSSE",
+	int(TextTypeAlbumSortOrder):      "TSOA",
+	int(TextTypeTitleSortOrder):      "TSOT",
+	int(TextTypeUnknown):             "TUNK",
 }
 
-var v24TextTypeToFrameID = v24FrameIDToTextType.Reversed()
+var v24FrameIDToTextType = v24TextTypeToFrameID.Reverse()
 
 var v24TypeBoundsMap = boundsMap{
 	"Encoding":         {0, 3},
@@ -89,8 +89,8 @@ type codec24 struct {
 	frameTypes        typeMap
 	headerFlags       flagMap
 	frameFlags        flagMap
-	frameIDToTextType stringMap
-	textTypeToFrameID stringMapReversed
+	frameIDToTextType stringToIntMap
+	textTypeToFrameID intToStringMap
 	bounds            boundsMap
 }
 

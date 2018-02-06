@@ -98,11 +98,11 @@ func (f flagMap) Encode(flags uint32) uint32 {
 // stringMap
 //
 
-type stringMap map[string]int
-type stringMapReversed map[int]string
+type stringToIntMap map[string]int
+type intToStringMap map[int]string
 
-func (s stringMap) Reversed() stringMapReversed {
-	r := make(stringMapReversed)
+func (s intToStringMap) Reverse() stringToIntMap {
+	r := make(stringToIntMap)
 	for k, v := range s {
 		r[v] = k
 	}

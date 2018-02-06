@@ -57,10 +57,11 @@ const (
 	FrameFlagHasDataLength                                  // Frame has a data length indicator
 )
 
-// PictureType describes the type of picture stored within an APIC frame.
+// PictureType describes the type of picture stored within an Attached
+// Picture frame.
 type PictureType uint8
 
-// All possible values of the Type field within an APIC frame payload.
+// All possible picture types.
 const (
 	PictureTypeOther PictureType = iota
 	PictureTypeIcon
@@ -136,8 +137,8 @@ const (
 	TextTypeOriginalFileName    // TOFN
 	TextTypePlaylistDelay       // TDLY
 	TextTypeEncodingTime        // TDEN (v2.4 only)
-	TextTypeOriginalReleaseTime // TDOR (v2.4 only)
-	TextTypeRecordingTime       // TDRC (v2.4 only)
+	TextTypeOriginalReleaseTime // TDOR (v2.4) or TORY (v2.3)
+	TextTypeRecordingTime       // TDRC (v2.4) or TYER (v2.3)
 	TextTypeReleaseTime         // TDRL (v2.4 only)
 	TextTypeTaggingTime         // TDTG (v2.4 only)
 	TextTypeEncodingSoftware    // TSSE
@@ -145,12 +146,10 @@ const (
 	TextTypeTitleSortOrder      // TSOT (v2.4 only)
 
 	// v2.3-only frames (ID3v2.3 spec)
-	TextTypeDate                // TDAT (TDRC in v2.4)
-	TextTypeTime                // TIME (TDRC in v2.4)
-	TextTypeOriginalReleaseYear // TORY (TDOR in v2.4)
-	TextTypeRecordingDates      // TRDA (TDRC in v2.4)
-	TextTypeYear                // TYER (TDRC in v2.4)
-	TextTypeSize                // TSIZ
+	TextTypeDate           // TDAT (subsumed by TDRC in v2.4)
+	TextTypeTime           // TIME (subsumed by TDRC in v2.4)
+	TextTypeRecordingDates // TRDA (subsumed by TDRC in v2.4)
+	TextTypeSize           // TSIZ
 
 	// Non-standard values
 	TextTypeUnknown
@@ -185,7 +184,7 @@ const (
 
 // A GroupSymbol is a value between 0x80 and 0xF0 that uniquely identifies
 // a grouped set of frames. The data associated with each GroupSymbol value
-// is described futher in GRID frames.
+// is described futher in group identifier frames.
 type GroupSymbol byte
 
 // A Frame is an interface capable of representing the payload of any of the
@@ -212,7 +211,7 @@ type FrameUnknown struct {
 }
 
 // FrameText may contain the payload of any type of text frame
-// except for a user-defined TXXX text frame.  In v2.4, each text frame
+// except for a custom text frame.  In v2.4, each text frame
 // may contain one or more text strings.  In all other versions, only one
 // text string may appear.
 type FrameText struct {
@@ -222,7 +221,7 @@ type FrameText struct {
 	Text     []string
 }
 
-// NewFrameText creates a new text frame payload.
+// NewFrameText creates a new text frame payload with a single text string.
 func NewFrameText(typ TextType, text string) *FrameText {
 	return &FrameText{
 		ID:       FrameID(v24TextTypeToFrameID[int(typ)]),
