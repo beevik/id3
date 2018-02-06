@@ -101,8 +101,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 
 	// Decode the extended header if it exists.
 	if (t.Flags & TagFlagExtended) != 0 {
-		n, err = codec.DecodeExtendedHeader(t, rb)
-		nn += int64(n)
+		_, err = codec.DecodeExtendedHeader(t, rb)
 		if err != nil {
 			return nn, err
 		}
@@ -120,14 +119,12 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	for rb.Len() > 0 {
 		f := Frame{}
 
-		n, err = codec.DecodeFrame(t, &f, rb)
-		nn += int64(n)
+		_, err = codec.DecodeFrame(t, &f, rb)
 
 		if err == errPaddingEncountered {
 			t.Padding = rb.Len()
 			pad := make([]byte, t.Padding)
-			n, err = io.ReadFull(rb, pad)
-			nn += int64(n)
+			_, err = io.ReadFull(rb, pad)
 			if err != nil {
 				return nn, err
 			}
