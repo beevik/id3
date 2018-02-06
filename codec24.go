@@ -9,39 +9,99 @@ import (
 // codec24
 //
 
+var v24HeaderFlags = flagMap{
+	{1 << 7, uint32(TagFlagUnsync)},
+	{1 << 6, uint32(TagFlagExtended)},
+	{1 << 5, uint32(TagFlagExperimental)},
+	{1 << 4, uint32(TagFlagFooter)},
+}
+
+var v24FrameFlags = flagMap{
+	{1 << 14, uint32(FrameFlagDiscardOnTagAlteration)},
+	{1 << 13, uint32(FrameFlagDiscardOnFileAlteration)},
+	{1 << 12, uint32(FrameFlagReadOnly)},
+	{1 << 6, uint32(FrameFlagHasGroupInfo)},
+	{1 << 3, uint32(FrameFlagCompressed)},
+	{1 << 2, uint32(FrameFlagEncrypted)},
+	{1 << 1, uint32(FrameFlagUnsynchronized)},
+	{1 << 0, uint32(FrameFlagHasDataLength)},
+}
+
+var v24FrameIDToTextType = stringMap{
+	"TIT1": int(TextTypeGroupDescription),
+	"TIT2": int(TextTypeSongTitle),
+	"TIT3": int(TextTypeSongSubtitle),
+	"TALB": int(TextTypeAlbumName),
+	"TOAL": int(TextTypeOriginalAlbum),
+	"TRCK": int(TextTypeTrackNumber),
+	"TPOS": int(TextTypePartOfSet),
+	"TSST": int(TextTypeSetSubtitle),
+	"TSRC": int(TextTypeISRC),
+	"TPE1": int(TextTypeArtist),
+	"TPE2": int(TextTypeAlbumArtist),
+	"TPE3": int(TextTypeConductor),
+	"TPE4": int(TextTypeRemixer),
+	"TOPE": int(TextTypeOriginalPerformer),
+	"TEXT": int(TextTypeLyricist),
+	"TOLY": int(TextTypeOriginalLyricist),
+	"TCOM": int(TextTypeComposer),
+	"TMCL": int(TextTypeMusicians),
+	"TIPL": int(TextTypeInvolvedPeople),
+	"TENC": int(TextTypeEncodedBy),
+	"TBPM": int(TextTypeBPM),
+	"TLEN": int(TextTypeLengthInMs),
+	"TKEY": int(TextTypeMusicalKey),
+	"TLAN": int(TextTypeLanguage),
+	"TCON": int(TextTypeGenre),
+	"TFLT": int(TextTypeFileType),
+	"TMED": int(TextTypeMediaType),
+	"TMOO": int(TextTypeMood),
+	"TCOP": int(TextTypeCopyright),
+	"TPRO": int(TextTypeProducedNotice),
+	"TPUB": int(TextTypePublisher),
+	"TOWN": int(TextTypeOwner),
+	"TRSN": int(TextTypeRadioStation),
+	"TRSO": int(TextTypeRadioStationOwner),
+	"TOFN": int(TextTypeOriginalFileName),
+	"TDLY": int(TextTypePlaylistDelay),
+	"TDEN": int(TextTypeEncodingTime),
+	"TDOR": int(TextTypeOriginalReleaseTime),
+	"TDRC": int(TextTypeRecordingTime),
+	"TDRL": int(TextTypeReleaseTime),
+	"TDTG": int(TextTypeTaggingTime),
+	"TSSE": int(TextTypeEncodingSoftware),
+	"TSOA": int(TextTypeAlbumSortOrder),
+	"TSOT": int(TextTypeTitleSortOrder),
+	"TUNK": int(TextTypeUnknown),
+}
+
+var v24TextTypeToFrameID = v24FrameIDToTextType.Reversed()
+
+var v24TypeBoundsMap = boundsMap{
+	"Encoding":         {0, 3},
+	"GroupSymbol":      {0x80, 0xf0},
+	"PictureType":      {0, 20},
+	"TimeStampFormat":  {1, 2},
+	"LyricContentType": {0, 8},
+}
+
 type codec24 struct {
-	frameTypes  typeMap   // table of all frame types
-	headerFlags flagMap   // tag header flags
-	frameFlags  flagMap   // frame header flags
-	bounds      boundsMap // integer field bounds, by type
+	frameTypes        typeMap
+	headerFlags       flagMap
+	frameFlags        flagMap
+	frameIDToTextType stringMap
+	textTypeToFrameID stringMapReversed
+	bounds            boundsMap
 }
 
 func newCodec24() *codec24 {
 	return &codec24{
-		frameTypes: newTypeMap("v24"),
-		headerFlags: flagMap{
-			{1 << 7, uint32(TagFlagUnsync)},
-			{1 << 6, uint32(TagFlagExtended)},
-			{1 << 5, uint32(TagFlagExperimental)},
-			{1 << 4, uint32(TagFlagFooter)},
-		},
-		frameFlags: flagMap{
-			{1 << 14, uint32(FrameFlagDiscardOnTagAlteration)},
-			{1 << 13, uint32(FrameFlagDiscardOnFileAlteration)},
-			{1 << 12, uint32(FrameFlagReadOnly)},
-			{1 << 6, uint32(FrameFlagHasGroupInfo)},
-			{1 << 3, uint32(FrameFlagCompressed)},
-			{1 << 2, uint32(FrameFlagEncrypted)},
-			{1 << 1, uint32(FrameFlagUnsynchronized)},
-			{1 << 0, uint32(FrameFlagHasDataLength)},
-		},
-		bounds: boundsMap{
-			"Encoding":         {0, 3},
-			"GroupSymbol":      {0x80, 0xf0},
-			"PictureType":      {0, 20},
-			"TimeStampFormat":  {1, 2},
-			"LyricContentType": {0, 8},
-		},
+		frameTypes:        newTypeMap("v24"),
+		headerFlags:       v24HeaderFlags,
+		frameFlags:        v24FrameFlags,
+		frameIDToTextType: v24FrameIDToTextType,
+		textTypeToFrameID: v24TextTypeToFrameID,
+		bounds:            v24TypeBoundsMap,
 	}
 }
 
@@ -183,7 +243,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *FrameHolder, r io.Reader) (int, error) 
 	}
 
 	// Select a frame payload type and scan its structure.
-	typ := c.frameTypes.Lookup24(string(f.header.ID))
+	typ := c.frameTypes.Lookup(string(f.header.ID))
 	p := property{
 		typ:   typ,
 		tags:  emptyTagList,
@@ -360,6 +420,15 @@ func (c *codec24) scanStructSlice(s *scanner, p property, state *state) {
 
 func (c *codec24) scanUint8(s *scanner, p property, state *state) {
 	if s.err != nil {
+		return
+	}
+
+	if p.tags.Lookup("texttype") {
+		ty, ok := c.frameIDToTextType[string(state.ID)]
+		if !ok {
+			ty = int(TextTypeUnknown)
+		}
+		p.value.SetUint(uint64(ty))
 		return
 	}
 

@@ -85,6 +85,77 @@ const (
 	PictureTypePublisherLogotype
 )
 
+// A TextType value identifies the type of an ID3 text frame.
+type TextType uint8
+
+// All standard types of text frames.
+const (
+	// Identification (ID3v2.4 spec section 4.2.1)
+	TextTypeGroupDescription TextType = iota // TIT1
+	TextTypeSongTitle                        // TIT2
+	TextTypeSongSubtitle                     // TIT3
+	TextTypeAlbumName                        // TALB
+	TextTypeOriginalAlbum                    // TOAL
+	TextTypeTrackNumber                      // TRCK
+	TextTypePartOfSet                        // TPOS
+	TextTypeSetSubtitle                      // TSST (v2.4 only)
+	TextTypeISRC                             // TSRC
+
+	// Involved persons (ID3v2.4 spec section 4.2.2)
+	TextTypeArtist            // TPE1
+	TextTypeAlbumArtist       // TPE2
+	TextTypeConductor         // TPE3
+	TextTypeRemixer           // TPE4
+	TextTypeOriginalPerformer // TOPE
+	TextTypeLyricist          // TEXT
+	TextTypeOriginalLyricist  // TOLY
+	TextTypeComposer          // TCOM
+	TextTypeMusicians         // TMCL (v2.4 only)
+	TextTypeInvolvedPeople    // TIPL (v2.4 only)
+	TextTypeEncodedBy         // TENC
+
+	// Derived and subjective properties (ID3v2.4 spec section 4.2.3)
+	TextTypeBPM        // TBPM
+	TextTypeLengthInMs // TLEN
+	TextTypeMusicalKey // TKEY
+	TextTypeLanguage   // TLAN
+	TextTypeGenre      // TCON (see Genre)
+	TextTypeFileType   // TFLT (see FileType)
+	TextTypeMediaType  // TMED
+	TextTypeMood       // TMOO (v2.4 only)
+
+	// Rights and license (ID3v2.4 spec section 4.2.4)
+	TextTypeCopyright         // TCOP
+	TextTypeProducedNotice    // TPRO (v2.4 only)
+	TextTypePublisher         // TPUB
+	TextTypeOwner             // TOWN
+	TextTypeRadioStation      // TRSN
+	TextTypeRadioStationOwner // TRSO
+
+	// Other text frames (ID3v2.4 spec section 4.2.5)
+	TextTypeOriginalFileName    // TOFN
+	TextTypePlaylistDelay       // TDLY
+	TextTypeEncodingTime        // TDEN (v2.4 only)
+	TextTypeOriginalReleaseTime // TDOR (v2.4 only)
+	TextTypeRecordingTime       // TDRC (v2.4 only)
+	TextTypeReleaseTime         // TDRL (v2.4 only)
+	TextTypeTaggingTime         // TDTG (v2.4 only)
+	TextTypeEncodingSoftware    // TSSE
+	TextTypeAlbumSortOrder      // TSOA (v2.4 only)
+	TextTypeTitleSortOrder      // TSOT (v2.4 only)
+
+	// v2.3-only frames (ID3v2.3 spec)
+	TextTypeDate                // TDAT (TDRC in v2.4)
+	TextTypeTime                // TIME (TDRC in v2.4)
+	TextTypeOriginalReleaseYear // TORY (TDOR in v2.4)
+	TextTypeRecordingDates      // TRDA (TDRC in v2.4)
+	TextTypeYear                // TYER (TDRC in v2.4)
+	TextTypeSize                // TSIZ
+
+	// Non-standard values
+	TextTypeUnknown
+)
+
 // TimeStampFormat indicates the type of time stamp used: milliseconds or
 // MPEG frame.
 type TimeStampFormat byte
@@ -136,7 +207,7 @@ type Frame interface {
 // FrameUnknown contains the payload of any frame whose ID is
 // unknown to this package.
 type FrameUnknown struct {
-	ID   FrameID `v23:"????" v24:"????"`
+	ID   FrameID `v22:"?" v23:"?" v24:"?"`
 	Data []byte
 }
 
@@ -145,15 +216,17 @@ type FrameUnknown struct {
 // may contain one or more text strings.  In all other versions, only one
 // text string may appear.
 type FrameText struct {
-	ID       FrameID `v22:"T__" v23:"T___" v24:"T___"`
+	ID       FrameID  `v22:"T" v23:"T" v24:"T"`
+	Type     TextType `id3:"texttype"`
 	Encoding Encoding
 	Text     []string
 }
 
 // NewFrameText creates a new text frame payload.
-func NewFrameText(id FrameID, text string) *FrameText {
+func NewFrameText(typ TextType, text string) *FrameText {
 	return &FrameText{
-		ID:       id,
+		ID:       FrameID(v24TextTypeToFrameID[int(typ)]),
+		Type:     typ,
 		Encoding: EncodingUTF8,
 		Text:     []string{text},
 	}
@@ -200,7 +273,7 @@ func NewFrameComment(language, description, text string) *FrameComment {
 // FrameURL may contain the payload of any type of URL frame except
 // for the user-defined WXXX URL frame.
 type FrameURL struct {
-	ID  FrameID `v22:"W__" v23:"W___" v24:"W___"`
+	ID  FrameID `v22:"W" v23:"W" v24:"W"`
 	URL string  `id3:"iso88519"`
 }
 

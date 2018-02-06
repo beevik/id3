@@ -11,7 +11,7 @@ import (
 
 func main() {
 
-	ff := id3.NewFrameHolder(id3.NewFrameComment("eng", "brett", "comment"))
+	ff := id3.NewFrameHolder(id3.NewFrameText(id3.TextTypeSongSubtitle, "Foo!"))
 	_ = ff
 
 	flag.Parse()

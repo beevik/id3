@@ -95,6 +95,21 @@ func (f flagMap) Encode(flags uint32) uint32 {
 }
 
 //
+// stringMap
+//
+
+type stringMap map[string]int
+type stringMapReversed map[int]string
+
+func (s stringMap) Reversed() stringMapReversed {
+	r := make(stringMapReversed)
+	for k, v := range s {
+		r[v] = k
+	}
+	return r
+}
+
+//
 // boundsMap
 //
 
