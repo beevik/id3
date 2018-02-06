@@ -724,7 +724,7 @@ Abstract
    This frame allows synchronisation with key events in the audio. The
    header is:
 
-     <Header for 'Event timing codes', ID: "ETCO">
+     <Header for 'Event timing codes', ID: "4">
      Time stamp format    $xx
 
    Where time stamp format is:

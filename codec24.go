@@ -56,6 +56,7 @@ type property struct {
 // The state structure keeps track of persistent state required while
 // decoding a single frame.
 type state struct {
+	ID       FrameID
 	encoding Encoding
 }
 
@@ -93,13 +94,13 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 		return s.n, s.err
 	}
 
-	// Scan extended data fields indicated by the flags.
 	if (exFlags & (1 << 6)) != 0 {
 		t.Flags |= TagFlagIsUpdate
 		if s.ConsumeByte() != 0 || s.err != nil {
 			return s.n, ErrInvalidHeader
 		}
 	}
+
 	if (exFlags & (1 << 5)) != 0 {
 		t.Flags |= TagFlagHasCRC
 		data := s.ConsumeBytes(6)
@@ -111,6 +112,7 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 			return s.n, ErrInvalidHeader
 		}
 	}
+
 	if (exFlags & (1 << 4)) != 0 {
 		t.Flags |= TagFlagHasRestrictions
 		data := s.ConsumeBytes(2)
@@ -134,7 +136,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	if hdr[0] == 0 && hdr[1] == 0 && hdr[2] == 0 && hdr[3] == 0 {
 		return s.n, errPaddingEncountered
 	}
-	f.Header.ID = string(hdr[0:4])
+	f.Header.ID = FrameID(hdr[0:4])
 
 	// Read the rest of the header.
 	if s.Read(r, 6); s.err != nil {
@@ -174,15 +176,14 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 		}
 	}
 
-	// Select a frame payload type based on the ID.
-	typ := c.payloadTypes.Lookup24(f.Header.ID)
-
-	// Initialize the scan state.
+	// Initialize the payload scan state.
 	state := state{
+		ID:       f.Header.ID,
 		encoding: EncodingISO88591,
 	}
 
-	// Scan the payload structure.
+	// Select a payload type and scan its structure.
+	typ := c.payloadTypes.Lookup24(string(f.Header.ID))
 	p := property{
 		typ:   typ,
 		tags:  emptyTagList,
@@ -233,10 +234,10 @@ func (c *codec24) scanExtraHeaderData(s *scanner, h *FrameHeader) {
 }
 
 func (c *codec24) scanStruct(s *scanner, p property, state *state) {
-	for i := 0; i < p.typ.NumField(); i++ {
+	for i, n := 0, p.typ.NumField(); i < n; i++ {
 		field := p.typ.Field(i)
 
-		pp := property{
+		fp := property{
 			typ:   field.Type,
 			tags:  getTags(field.Tag, "id3"),
 			value: p.value.Elem().Field(i),
@@ -244,37 +245,37 @@ func (c *codec24) scanStruct(s *scanner, p property, state *state) {
 
 		switch field.Type.Kind() {
 		case reflect.Uint8:
-			c.scanUint8(s, pp, state)
+			c.scanUint8(s, fp, state)
 
 		case reflect.Uint16:
-			c.scanUint16(s, pp, state)
+			c.scanUint16(s, fp, state)
 
 		case reflect.Uint32:
-			c.scanUint32(s, pp, state)
+			c.scanUint32(s, fp, state)
 
 		case reflect.Uint64:
-			c.scanUint64(s, pp, state)
+			c.scanUint64(s, fp, state)
 
 		case reflect.Slice:
 			switch field.Type.Elem().Kind() {
 			case reflect.Uint8:
-				c.scanByteSlice(s, pp, state)
+				c.scanByteSlice(s, fp, state)
 			case reflect.String:
-				c.scanStringSlice(s, pp, state)
+				c.scanStringSlice(s, fp, state)
 			case reflect.Struct:
-				c.scanStructSlice(s, pp, state)
+				c.scanStructSlice(s, fp, state)
 			default:
-				s.err = ErrUnknownFieldType
+				panic(errUnknownFieldType)
 			}
 
 		case reflect.String:
-			c.scanString(s, pp, state)
+			c.scanString(s, fp, state)
 
 		case reflect.Struct:
-			c.scanStruct(s, pp, state)
+			c.scanStruct(s, fp, state)
 
 		default:
-			s.err = ErrUnknownFieldType
+			panic(errUnknownFieldType)
 		}
 	}
 }
@@ -284,15 +285,19 @@ func (c *codec24) scanString(s *scanner, p property, state *state) {
 		return
 	}
 
-	enc := state.encoding
+	if p.typ.Name() == "FrameID" {
+		p.value.SetString(string(state.ID))
+		return
+	}
 
+	enc := state.encoding
 	if p.tags.Lookup("iso88519") {
 		enc = EncodingISO88591
 	}
 
 	var str string
 	if p.tags.Lookup("lang") {
-		str = s.ConsumeFixedLenString(3, EncodingISO88591)
+		str = s.ConsumeFixedLengthString(3, EncodingISO88591)
 	} else {
 		str = s.ConsumeNextString(enc)
 	}
@@ -329,7 +334,7 @@ func (c *codec24) scanStructSlice(s *scanner, p property, state *state) {
 		return
 	}
 
-	elems := make([]reflect.Value, 0, 1)
+	elems := make([]reflect.Value, 0)
 	for s.Len() > 0 {
 		etyp := p.typ.Elem()
 		ep := property{
@@ -361,7 +366,11 @@ func (c *codec24) scanUint8(s *scanner, p property, state *state) {
 	b, hasBounds := c.bounds[p.typ.Name()]
 
 	value := s.ConsumeByte()
-	if s.err != nil || (hasBounds && (value < uint8(b.min) || value > uint8(b.max))) {
+	if s.err != nil {
+		return
+	}
+
+	if hasBounds && (value < uint8(b.min) || value > uint8(b.max)) {
 		s.err = ErrInvalidFrame
 		return
 	}
@@ -375,11 +384,6 @@ func (c *codec24) scanUint8(s *scanner, p property, state *state) {
 
 func (c *codec24) scanUint16(s *scanner, p property, state *state) {
 	if s.err != nil {
-		return
-	}
-
-	// Ignore frame id fields.
-	if p.typ.Name() == "frameID" {
 		return
 	}
 

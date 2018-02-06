@@ -48,19 +48,19 @@ func newCodec(v uint8) (codec, error) {
 // ReadFrom reads from a stream into an ID3 tag. It returns the number of
 // bytes read and any error encountered during decoding.
 func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
-	var nn int64
+	var n int64
 
 	// Attempt to read the 10-byte ID3 header.
 	hdr := make([]byte, 10)
-	n, err := io.ReadFull(r, hdr)
-	nn += int64(n)
+	nn, err := io.ReadFull(r, hdr)
+	n += int64(nn)
 	if err != nil {
-		return nn, ErrInvalidTag
+		return n, ErrInvalidTag
 	}
 
 	// Make sure the tag id is "ID3".
 	if hdr[0] != 'I' || hdr[1] != 'D' || hdr[2] != '3' {
-		return nn, ErrInvalidTag
+		return n, ErrInvalidTag
 	}
 
 	// Process the version number (2.2, 2.3, or 2.4).
@@ -69,7 +69,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	// Choose a version-appropriate codec to process the data.
 	codec, err := newCodec(t.Version)
 	if err != nil {
-		return nn, err
+		return n, err
 	}
 
 	// Allow the codec to interpret the flags field.
@@ -80,15 +80,15 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	size, err := decodeSyncSafeUint32(hdr[6:10])
 	t.Size = int(size)
 	if err != nil {
-		return nn, err
+		return n, err
 	}
 
 	// Read the rest of the tag into a buffer.
 	buf := make([]byte, t.Size)
-	n, err = io.ReadFull(r, buf)
-	nn += int64(n)
+	nn, err = io.ReadFull(r, buf)
+	n += int64(nn)
 	if err != nil {
-		return nn, ErrInvalidTag
+		return n, ErrInvalidTag
 	}
 
 	// If the "unsync" flag is set, remove all unsync codes from the buffer.
@@ -103,7 +103,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	if (t.Flags & TagFlagExtended) != 0 {
 		_, err = codec.DecodeExtendedHeader(t, rb)
 		if err != nil {
-			return nn, err
+			return n, err
 		}
 	}
 
@@ -111,7 +111,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	if (t.Flags & TagFlagHasCRC) != 0 {
 		crc := crc32.ChecksumIEEE(rb.Bytes())
 		if crc != t.CRC {
-			return nn, ErrInvalidCRC
+			return n, ErrInvalidCRC
 		}
 	}
 
@@ -126,13 +126,13 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 			pad := make([]byte, t.Padding)
 			_, err = io.ReadFull(rb, pad)
 			if err != nil {
-				return nn, err
+				return n, err
 			}
 			break
 		}
 
 		if err != nil {
-			return nn, err
+			return n, err
 		}
 
 		t.Frames = append(t.Frames, f)
@@ -141,21 +141,21 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	// If there's a footer, validate it.
 	if (t.Flags & TagFlagFooter) != 0 {
 		footer := make([]byte, 10)
-		n, err = io.ReadFull(r, footer)
-		nn += int64(n)
+		nn, err = io.ReadFull(r, footer)
+		n += int64(nn)
 		if err != nil {
-			return nn, err
+			return n, err
 		}
 
 		if footer[0] != '3' || footer[1] != 'D' || footer[2] != 'I' {
-			return nn, ErrInvalidFooter
+			return n, ErrInvalidFooter
 		}
 		if bytes.Compare(footer[3:], hdr[3:]) != 0 {
-			return nn, ErrInvalidFooter
+			return n, ErrInvalidFooter
 		}
 	}
 
-	return nn, nil
+	return n, nil
 }
 
 // WriteTo writes an ID3 tag to an output stream. It returns the number of
@@ -191,17 +191,18 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 		return 0, err
 	}
 
-	var nn int64
+	var n int64
 
 	// Write the header to the output stream.
-	n, err := w.Write(hdr)
-	nn += int64(n)
+	nn, err := w.Write(hdr)
+	n += int64(nn)
 	if err != nil {
-		return nn, err
+		return n, err
 	}
 
 	// Write the frames to the output stream.
-	n, err = w.Write(b)
-	nn += int64(n)
-	return nn, err
+	nn, err = w.Write(b)
+	n += int64(nn)
+
+	return n, err
 }

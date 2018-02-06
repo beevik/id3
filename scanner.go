@@ -70,7 +70,7 @@ func (s *scanner) ConsumeStrings(enc Encoding) []string {
 	return ss
 }
 
-func (s *scanner) ConsumeFixedLenString(len int, enc Encoding) string {
+func (s *scanner) ConsumeFixedLengthString(len int, enc Encoding) string {
 	if s.err != nil {
 		return strings.Repeat("_", len)
 	}

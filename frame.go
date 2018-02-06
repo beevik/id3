@@ -2,6 +2,9 @@ package id3
 
 import "reflect"
 
+// A FrameID is a 4-character string indicating the type of ID3 frame.
+type FrameID string
+
 // A Frame holds an entire ID3 frame including its header and payload.
 type Frame struct {
 	Header  FrameHeader
@@ -10,7 +13,7 @@ type Frame struct {
 
 // A FrameHeader holds the data described by a frame header.
 type FrameHeader struct {
-	ID            string      // Frame ID string
+	ID            FrameID     // Frame ID string
 	Size          int         // Frame size not including 10-byte header
 	Flags         FrameFlags  // Flags
 	GroupID       GroupSymbol // Optional group identifier
@@ -118,13 +121,11 @@ var frameTypes = []reflect.Type{
 	reflect.TypeOf(FramePayloadPOPM{}),
 }
 
-type frameID uint16
-
 // FramePayloadUnknown contains the payload of any frame whose ID is
 // unknown to this package.
 type FramePayloadUnknown struct {
-	frameID frameID `v23:"????" v24:"????"`
-	Data    []byte
+	ID   FrameID `v23:"????" v24:"????"`
+	Data []byte
 }
 
 // FramePayloadText may contain the payload of any type of text frame
@@ -132,14 +133,14 @@ type FramePayloadUnknown struct {
 // may contain one or more text strings.  In all other versions, only one
 // text string may appear.
 type FramePayloadText struct {
-	frameID  frameID `v22:"T__" v23:"T___" v24:"T___"`
+	ID       FrameID `v22:"T__" v23:"T___" v24:"T___"`
 	Encoding Encoding
 	Text     []string
 }
 
 // FramePayloadTXXX contains a custom text payload.
 type FramePayloadTXXX struct {
-	frameID     frameID `v22:"TXX" v23:"TXXX" v24:"TXXX"`
+	ID          FrameID `v22:"TXX" v23:"TXXX" v24:"TXXX"`
 	Encoding    Encoding
 	Description string
 	Text        string
@@ -148,7 +149,7 @@ type FramePayloadTXXX struct {
 // FramePayloadCOMM contains a full-text comment that doesn't fit in any
 // of the other frames.
 type FramePayloadCOMM struct {
-	frameID     frameID `v22:"COM" v23:"COMM" v24:"COMM"`
+	ID          FrameID `v22:"COM" v23:"COMM" v24:"COMM"`
 	Encoding    Encoding
 	Language    string `id3:"lang"`
 	Description string
@@ -158,13 +159,13 @@ type FramePayloadCOMM struct {
 // FramePayloadURL may contain the payload of any type of URL frame except
 // for the user-defined WXXX URL frame.
 type FramePayloadURL struct {
-	frameID frameID `v22:"W__" v23:"W___" v24:"W___"`
-	URL     string  `id3:"iso88519"`
+	ID  FrameID `v22:"W__" v23:"W___" v24:"W___"`
+	URL string  `id3:"iso88519"`
 }
 
 // FramePayloadWXXX contains a custom URL payload.
 type FramePayloadWXXX struct {
-	frameID     frameID `v22:"WXX" v23:"WXXX" v24:"WXXXX"`
+	ID          FrameID `v22:"WXX" v23:"WXXX" v24:"WXXXX"`
 	Encoding    Encoding
 	Description string
 	URL         string `id3:"iso88519"`
@@ -172,7 +173,7 @@ type FramePayloadWXXX struct {
 
 // FramePayloadAPIC contains the payload of an image frame.
 type FramePayloadAPIC struct {
-	frameID     frameID `v22:"PIC" v23:"APIC" v24:"APIC"`
+	ID          FrameID `v22:"PIC" v23:"APIC" v24:"APIC"`
 	Encoding    Encoding
 	MimeType    string `id3:"iso88519"`
 	Type        PictureType
@@ -182,14 +183,14 @@ type FramePayloadAPIC struct {
 
 // FramePayloadUFID contains a unique file identifier for the MP3.
 type FramePayloadUFID struct {
-	frameID    frameID `v22:"UFI" v23:"UFID" v24:"UFID"`
+	ID         FrameID `v22:"UFI" v23:"UFID" v24:"UFID"`
 	Owner      string  `id3:"iso88519"`
 	Identifier string  `id3:"iso88519"`
 }
 
 // FramePayloadUSER contains the terms of use description for the MP3.
 type FramePayloadUSER struct {
-	frameID  frameID `v23:"USER" v24:"USER"`
+	ID       FrameID `v23:"USER" v24:"USER"`
 	Encoding Encoding
 	Language string `id3:"lang"`
 	Text     string
@@ -198,7 +199,7 @@ type FramePayloadUSER struct {
 // FramePayloadUSLT contains unsynchronized lyrics and text transcription
 // data.
 type FramePayloadUSLT struct {
-	frameID    frameID `v22:"ULT" v23:"USLT" v24:"USLT"`
+	ID         FrameID `v22:"ULT" v23:"USLT" v24:"USLT"`
 	Encoding   Encoding
 	Language   string `id3:"lang"`
 	Descriptor string
@@ -214,7 +215,7 @@ type LyricSync struct {
 
 // FramePayloadSYLT contains synchronized lyrics or text information.
 type FramePayloadSYLT struct {
-	frameID         frameID `v22:"SLT" v23:"SYLT" v24:"SYLT"`
+	ID              FrameID `v22:"SLT" v23:"SYLT" v24:"SYLT"`
 	Encoding        Encoding
 	Language        string `id3:"lang"`
 	TimeStampFormat TimeStampFormat
@@ -231,7 +232,7 @@ type TempoSync struct {
 
 // FramePayloadSYTC contains synchronized tempo codes.
 type FramePayloadSYTC struct {
-	frameID         frameID `v22:"STC" v23:"SYTC" v24:"SYTC"`
+	ID              FrameID `v22:"STC" v23:"SYTC" v24:"SYTC"`
 	TimeStampFormat TimeStampFormat
 	Sync            []TempoSync
 }
@@ -241,7 +242,7 @@ type FramePayloadSYTC struct {
 // identifier, there will be a corresponding GRID frame with data
 // describing the group.
 type FramePayloadGRID struct {
-	frameID frameID `v23:"GRID" v24:"GRID"`
+	ID      FrameID `v23:"GRID" v24:"GRID"`
 	Owner   string  `id3:"iso88519"`
 	GroupID GroupSymbol
 	Data    []byte
@@ -250,21 +251,21 @@ type FramePayloadGRID struct {
 // FramePayloadPRIV contains private information specific to a software
 // producer.
 type FramePayloadPRIV struct {
-	frameID frameID `v23:"PRIV" v24:"PRIV"`
-	Owner   string  `id3:"iso88519"`
-	Data    []byte
+	ID    FrameID `v23:"PRIV" v24:"PRIV"`
+	Owner string  `id3:"iso88519"`
+	Data  []byte
 }
 
 // FramePayloadPCNT tracks the number of times the MP3 file has been played.
 type FramePayloadPCNT struct {
-	frameID frameID `v22:"CNT" v23:"PCNT" v24:"PCNT"`
-	Count   uint64  `id3:"counter"`
+	ID    FrameID `v22:"CNT" v23:"PCNT" v24:"PCNT"`
+	Count uint64  `id3:"counter"`
 }
 
 // FramePayloadPOPM tracks the "popularimeter" value for an MP3 file.
 type FramePayloadPOPM struct {
-	frameID frameID `v22:"POP" v23:"POPM" v24:"POPM"`
-	Email   string  `id3:"iso88519"`
-	Rating  uint8
-	Count   uint64 `id3:"counter"`
+	ID     FrameID `v22:"POP" v23:"POPM" v24:"POPM"`
+	Email  string  `id3:"iso88519"`
+	Rating uint8
+	Count  uint64 `id3:"counter"`
 }

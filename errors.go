@@ -20,7 +20,6 @@ var (
 	ErrInvalidFrameHeader   = errors.New("invalid frame header")
 	ErrInvalidFrameFlags    = errors.New("invalid frame flags")
 	ErrInvalidEncodedString = errors.New("invalid encoded string")
-	ErrUnknownFieldType     = errors.New("unknown field type")
 	ErrInvalidCRC           = errors.New("ID3 tag failed CRC check")
 	ErrInvalidFooter        = errors.New("invalid footer")
 	ErrUnimplemented        = errors.New("code path unimplemented")
@@ -28,4 +27,5 @@ var (
 	errPaddingEncountered = errors.New("padding encountered")
 	errInvalidPayloadDef  = errors.New("invalid frame payload definition")
 	errInsufficientBuffer = errors.New("insufficient buffer")
+	errUnknownFieldType   = errors.New("unknown field type")
 )
