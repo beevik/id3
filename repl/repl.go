@@ -11,7 +11,12 @@ import (
 
 func main() {
 
-	ff := id3.NewFrameHolder(id3.NewFrameText(id3.TextTypeSongSubtitle, "Foo!"))
+	lyr := id3.NewFrameLyricsSync("eng", "lyrics",
+		id3.TimeStampMilliseconds, id3.LyricContentTypeTranscription)
+	lyr.AddSyllable(id3.LyricSyllable{Text: "c", TimeStamp: 3})
+	lyr.AddSyllable(id3.LyricSyllable{Text: "a", TimeStamp: 1})
+	lyr.AddSyllable(id3.LyricSyllable{Text: "b", TimeStamp: 2})
+	ff := id3.NewFrameHolder(lyr)
 	_ = ff
 
 	flag.Parse()

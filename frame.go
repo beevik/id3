@@ -294,11 +294,32 @@ type FrameAttachedPicture struct {
 	Data        []byte
 }
 
+// NewFrameAttachedPicture creates a new attached-picture frame.
+func NewFrameAttachedPicture(mimeType, description string, typ PictureType, data []byte) *FrameAttachedPicture {
+	return &FrameAttachedPicture{
+		ID:          "APIC",
+		Encoding:    EncodingUTF8,
+		MimeType:    mimeType,
+		Type:        typ,
+		Description: description,
+		Data:        data,
+	}
+}
+
 // FrameUniqueFileID contains a unique file identifier for the MP3.
 type FrameUniqueFileID struct {
 	ID         FrameID `v22:"UFI" v23:"UFID" v24:"UFID"`
 	Owner      string  `id3:"iso88519"`
 	Identifier string  `id3:"iso88519"`
+}
+
+// NewFrameUniqueFileID creates a new Unique FileID frame.
+func NewFrameUniqueFileID(owner, id string) *FrameUniqueFileID {
+	return &FrameUniqueFileID{
+		ID:         "UFID",
+		Owner:      owner,
+		Identifier: id,
+	}
 }
 
 // FrameTermsOfUse contains the terms of use description for the MP3.
@@ -307,6 +328,16 @@ type FrameTermsOfUse struct {
 	Encoding Encoding
 	Language string `id3:"lang"`
 	Text     string
+}
+
+// NewFrameTermsOfUser creates a new terms-of-use frame.
+func NewFrameTermsOfUse(language, text string) *FrameTermsOfUse {
+	return &FrameTermsOfUse{
+		ID:       "USER",
+		Encoding: EncodingUTF8,
+		Language: language,
+		Text:     text,
+	}
 }
 
 // FrameLyricsUnsync contains unsynchronized lyrics and text transcription
@@ -319,22 +350,65 @@ type FrameLyricsUnsync struct {
 	Text       string
 }
 
-// LyricSync describes a single syllable or event within a synchronized
+// NewFrameLyricsUnsync creates a new unsynchronized lyrics frame.
+func NewFrameLyricsUnsync(language, descriptor, lyrics string) *FrameLyricsUnsync {
+	return &FrameLyricsUnsync{
+		ID:         "USLT",
+		Encoding:   EncodingUTF8,
+		Language:   language,
+		Descriptor: descriptor,
+		Text:       lyrics,
+	}
+}
+
+// LyricSyllable describes a single syllable or event within a synchronized
 // lyric or text frame (SYLT).
-type LyricSync struct {
+type LyricSyllable struct {
 	Text      string
 	TimeStamp uint32
 }
 
 // FrameLyricsSync contains synchronized lyrics or text information.
 type FrameLyricsSync struct {
-	ID              FrameID `v22:"SLT" v23:"SYLT" v24:"SYLT"`
-	Encoding        Encoding
-	Language        string `id3:"lang"`
-	TimeStampFormat TimeStampFormat
-	ContentType     LyricContentType
-	Descriptor      string
-	Sync            []LyricSync
+	ID         FrameID `v22:"SLT" v23:"SYLT" v24:"SYLT"`
+	Encoding   Encoding
+	Language   string `id3:"lang"`
+	Format     TimeStampFormat
+	Type       LyricContentType
+	Descriptor string
+	Syllables  []LyricSyllable
+}
+
+// NewFrameLyricsSync creates a new synchronized lyrics frame.
+func NewFrameLyricsSync(language, descriptor string,
+	format TimeStampFormat, typ LyricContentType) *FrameLyricsSync {
+	return &FrameLyricsSync{
+		ID:        "SYLT",
+		Encoding:  EncodingUTF8,
+		Language:  language,
+		Format:    format,
+		Type:      typ,
+		Syllables: []LyricSyllable{},
+	}
+}
+
+// AddSyllable inserts a time-stamped syllable into a synchronized lyric
+// frame. It inserts the syllable in sorted order by time stamp.
+func (f *FrameLyricsSync) AddSyllable(syllable LyricSyllable) {
+	var i int
+	for i = range f.Syllables {
+		if f.Syllables[i].TimeStamp > syllable.TimeStamp {
+			break
+		}
+	}
+	switch {
+	case i == len(f.Syllables):
+		f.Syllables = append(f.Syllables, syllable)
+	default:
+		f.Syllables = append(f.Syllables, LyricSyllable{})
+		copy(f.Syllables[i+1:], f.Syllables[i:])
+		f.Syllables[i] = syllable
+	}
 }
 
 // TempoSync describes a tempo change.
