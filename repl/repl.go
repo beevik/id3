@@ -11,7 +11,12 @@ import (
 
 func main() {
 
-	ff := id3.NewFrameHolder(id3.NewFrameText(id3.TextTypeSongSubtitle, "Foo!"))
+	lyr := id3.NewFrameLyricsSync("eng", "lyrics",
+		id3.TimeStampMilliseconds, id3.LyricContentTypeTranscription)
+	lyr.AddSyllable(id3.LyricSyllable{Text: "c", TimeStamp: 3})
+	lyr.AddSyllable(id3.LyricSyllable{Text: "a", TimeStamp: 1})
+	lyr.AddSyllable(id3.LyricSyllable{Text: "b", TimeStamp: 2})
+	ff := id3.NewFrameHolder(lyr)
 	_ = ff
 
 	flag.Parse()
@@ -70,8 +75,8 @@ func main() {
 			case *id3.FrameLyricsUnsync:
 				fmt.Printf(": [%s:%s] %s", f.Language, f.Descriptor, f.Text)
 			case *id3.FrameLyricsSync:
-				fmt.Printf(": [%s:%s] %d syncs", f.Language, f.Descriptor, len(f.Sync))
-				for _, s := range f.Sync {
+				fmt.Printf(": [%s:%s] %d syncs", f.Language, f.Descriptor, len(f.Syllables))
+				for _, s := range f.Syllables {
 					fmt.Printf("\n  %d: %s", s.TimeStamp, s.Text)
 				}
 			case *id3.FramePrivate:
