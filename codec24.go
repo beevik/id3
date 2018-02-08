@@ -104,7 +104,6 @@ var v24TypeBoundsMap = boundsMap{
 }
 
 type codec24 struct {
-	frameTypes           typeMap
 	headerFlags          flagMap
 	frameFlags           flagMap
 	frameTypeToFrameID   frameTypeToFrameID
@@ -115,7 +114,6 @@ type codec24 struct {
 
 func newCodec24() *codec24 {
 	return &codec24{
-		frameTypes:           newTypeMap("v24"),
 		headerFlags:          v24HeaderFlags,
 		frameFlags:           v24FrameFlags,
 		frameTypeToFrameID:   v24FrameTypeToFrameID,
@@ -263,7 +261,10 @@ func (c *codec24) DecodeFrame(t *Tag, f *FrameHolder, r io.Reader) (int, error) 
 	}
 
 	// Select a frame payload type and scan its structure.
-	typ := c.frameTypes.Lookup(string(f.header.ID))
+	typ, ok := c.frameIDToReflectType[string(f.header.ID)]
+	if !ok {
+		typ = reflect.TypeOf(&FrameUnknown{})
+	}
 	p := property{
 		typ:   typ,
 		tags:  emptyTagList,

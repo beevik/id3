@@ -5,13 +5,10 @@ import (
 )
 
 type codec23 struct {
-	payloadTypes typeMap
 }
 
 func newCodec23() *codec23 {
-	return &codec23{
-		payloadTypes: newTypeMap("v23"),
-	}
+	return &codec23{}
 }
 
 func (c *codec23) HeaderFlags() flagMap {
