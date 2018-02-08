@@ -361,9 +361,9 @@ func NewFrameLyricsUnsync(language, descriptor, lyrics string) *FrameLyricsUnsyn
 	}
 }
 
-// LyricSyllable describes a single syllable or event within a synchronized
+// LyricsSync describes a single syllable or event within a synchronized
 // lyric or text frame (SYLT).
-type LyricSyllable struct {
+type LyricsSync struct {
 	Text      string
 	TimeStamp uint32
 }
@@ -376,38 +376,38 @@ type FrameLyricsSync struct {
 	Format     TimeStampFormat
 	Type       LyricContentType
 	Descriptor string
-	Syllables  []LyricSyllable
+	Sync       []LyricsSync
 }
 
 // NewFrameLyricsSync creates a new synchronized lyrics frame.
 func NewFrameLyricsSync(language, descriptor string,
 	format TimeStampFormat, typ LyricContentType) *FrameLyricsSync {
 	return &FrameLyricsSync{
-		ID:        "SYLT",
-		Encoding:  EncodingUTF8,
-		Language:  language,
-		Format:    format,
-		Type:      typ,
-		Syllables: []LyricSyllable{},
+		ID:       "SYLT",
+		Encoding: EncodingUTF8,
+		Language: language,
+		Format:   format,
+		Type:     typ,
+		Sync:     []LyricsSync{},
 	}
 }
 
-// AddSyllable inserts a time-stamped syllable into a synchronized lyric
+// AddSync inserts a time-stamped syllable into a synchronized lyric
 // frame. It inserts the syllable in sorted order by time stamp.
-func (f *FrameLyricsSync) AddSyllable(syllable LyricSyllable) {
+func (f *FrameLyricsSync) AddSync(sync LyricsSync) {
 	var i int
-	for i = range f.Syllables {
-		if f.Syllables[i].TimeStamp > syllable.TimeStamp {
+	for i = range f.Sync {
+		if f.Sync[i].TimeStamp > sync.TimeStamp {
 			break
 		}
 	}
 	switch {
-	case i == len(f.Syllables):
-		f.Syllables = append(f.Syllables, syllable)
+	case i == len(f.Sync):
+		f.Sync = append(f.Sync, sync)
 	default:
-		f.Syllables = append(f.Syllables, LyricSyllable{})
-		copy(f.Syllables[i+1:], f.Syllables[i:])
-		f.Syllables[i] = syllable
+		f.Sync = append(f.Sync, LyricsSync{})
+		copy(f.Sync[i+1:], f.Sync[i:])
+		f.Sync[i] = sync
 	}
 }
 
@@ -424,6 +424,34 @@ type FrameSyncTempoCodes struct {
 	Sync            []TempoSync
 }
 
+// NewFrameSyncTempoCodes creates a new synchronized tempo codes frame.
+func NewFrameSyncTempoCodes(format TimeStampFormat) *FrameSyncTempoCodes {
+	return &FrameSyncTempoCodes{
+		ID:              "SYTC",
+		TimeStampFormat: format,
+		Sync:            []TempoSync{},
+	}
+}
+
+// AddSync inserts a time-stamped syllable into a synchronized lyric
+// frame. It inserts the syllable in sorted order by time stamp.
+func (f *FrameSyncTempoCodes) AddSync(sync TempoSync) {
+	var i int
+	for i = range f.Sync {
+		if f.Sync[i].TimeStamp > sync.TimeStamp {
+			break
+		}
+	}
+	switch {
+	case i == len(f.Sync):
+		f.Sync = append(f.Sync, sync)
+	default:
+		f.Sync = append(f.Sync, TempoSync{})
+		copy(f.Sync[i+1:], f.Sync[i:])
+		f.Sync[i] = sync
+	}
+}
+
 // FrameGroupID contains information describing the grouping of
 // otherwise unrelated frames. If a frame contains an optional group
 // identifier, there will be a corresponding GRID frame with data
@@ -435,6 +463,16 @@ type FrameGroupID struct {
 	Data    []byte
 }
 
+// NewFrameGroupID creates a new group identifier frame.
+func NewFrameGroupID(owner string, groupID GroupSymbol, data []byte) *FrameGroupID {
+	return &FrameGroupID{
+		ID:      "GRID",
+		Owner:   owner,
+		GroupID: groupID,
+		Data:    data,
+	}
+}
+
 // FramePrivate contains private information specific to a software
 // producer.
 type FramePrivate struct {
@@ -443,10 +481,27 @@ type FramePrivate struct {
 	Data  []byte
 }
 
+// NewFramePrivate creates a new private information frame.
+func NewFramePrivate(owner string, data []byte) *FramePrivate {
+	return &FramePrivate{
+		ID:    "PRIV",
+		Owner: owner,
+		Data:  data,
+	}
+}
+
 // FramePlayCount tracks the number of times the MP3 file has been played.
 type FramePlayCount struct {
 	ID    FrameID `v22:"CNT" v23:"PCNT" v24:"PCNT"`
 	Count uint64  `id3:"counter"`
+}
+
+// NewFramePlayCount creates a new play count frame.
+func NewFramePlayCount(count uint64) *FramePlayCount {
+	return &FramePlayCount{
+		ID:    "PCNT",
+		Count: count,
+	}
 }
 
 // FramePopularimeter tracks the "popularimeter" value for an MP3 file.
@@ -455,6 +510,16 @@ type FramePopularimeter struct {
 	Email  string  `id3:"iso88519"`
 	Rating uint8
 	Count  uint64 `id3:"counter"`
+}
+
+// NewFramePopularimeter creates a new "popularimeter" frame.
+func NewFramePopularimeter(email string, rating uint8, count uint64) *FramePopularimeter {
+	return &FramePopularimeter{
+		ID:     "POPM",
+		Email:  email,
+		Rating: rating,
+		Count:  count,
+	}
 }
 
 // frameTypes holds all possible frame payload types supported by ID3.
