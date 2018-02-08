@@ -11,13 +11,13 @@ import (
 
 func main() {
 
-	lyr := id3.NewFrameLyricsSync("eng", "lyrics",
-		id3.TimeStampMilliseconds, id3.LyricContentTypeTranscription)
-	lyr.AddSync(id3.LyricsSync{Text: "c", TimeStamp: 3})
-	lyr.AddSync(id3.LyricsSync{Text: "a", TimeStamp: 1})
-	lyr.AddSync(id3.LyricsSync{Text: "b", TimeStamp: 2})
-	ff := id3.NewFrameHolder(lyr)
-	_ = ff
+	// lyr := id3.NewFrameLyricsSync("eng", "lyrics",
+	// 	id3.TimeStampMilliseconds, id3.LyricContentTypeTranscription)
+	// lyr.AddSync(id3.LyricsSync{Text: "c", TimeStamp: 3})
+	// lyr.AddSync(id3.LyricsSync{Text: "a", TimeStamp: 1})
+	// lyr.AddSync(id3.LyricsSync{Text: "b", TimeStamp: 2})
+	// ff := id3.NewFrameHolder(lyr)
+	// _ = ff
 
 	flag.Parse()
 	args := flag.Args()

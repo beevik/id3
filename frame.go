@@ -3,19 +3,10 @@ package id3
 import "reflect"
 
 // A FrameHolder holds the header and payload of an ID3 frame.
+// DEPRECATED.
 type FrameHolder struct {
-	header FrameHeader
+	header frameHeader
 	Frame  Frame
-}
-
-// NewFrameHolder creates a new frame holder, which contains the header
-// and payload of an ID3 frame.
-func NewFrameHolder(frame Frame) *FrameHolder {
-	t := reflect.ValueOf(frame).Elem()
-	return &FrameHolder{
-		header: FrameHeader{ID: FrameID(t.Field(0).String())},
-		Frame:  frame,
-	}
 }
 
 // Size returns the encoded size of the frame, not including the header.
@@ -24,16 +15,13 @@ func (f *FrameHolder) Size() int {
 }
 
 // ID returns the 4-character ID string currently assigned to the frame.
-func (f *FrameHolder) ID() FrameID {
+func (f *FrameHolder) ID() string {
 	return f.header.ID
 }
 
-// A FrameID is a 4-character string indicating the type of ID3 frame.
-type FrameID string
-
-// A FrameHeader holds the data described by a frame header.
-type FrameHeader struct {
-	ID            FrameID     // Frame ID string
+// A frameHeader holds the data described by a frame header.
+type frameHeader struct {
+	ID            string      // Frame ID string
 	Size          int         // Frame size not including 10-byte header
 	Flags         FrameFlags  // Flags
 	GroupID       GroupSymbol // Optional group identifier
@@ -233,7 +221,7 @@ type Frame interface {
 // FrameUnknown contains the payload of any frame whose ID is
 // unknown to this package.
 type FrameUnknown struct {
-	ID   FrameID `v22:"?" v23:"?" v24:"?"`
+	Type FrameType
 	Data []byte
 }
 
@@ -242,8 +230,7 @@ type FrameUnknown struct {
 // may contain one or more text strings.  In all other versions, only one
 // text string may appear.
 type FrameText struct {
-	ID       FrameID   `v22:"T" v23:"T" v24:"T"`
-	Type     FrameType `id3:"texttype"`
+	Type     FrameType
 	Encoding Encoding
 	Text     []string
 }
@@ -251,7 +238,6 @@ type FrameText struct {
 // NewFrameText creates a new text frame payload with a single text string.
 func NewFrameText(typ FrameType, text string) *FrameText {
 	return &FrameText{
-		ID:       FrameID(v24FrameTypeToFrameID[typ]),
 		Type:     typ,
 		Encoding: EncodingUTF8,
 		Text:     []string{text},
@@ -260,7 +246,7 @@ func NewFrameText(typ FrameType, text string) *FrameText {
 
 // FrameTextCustom contains a custom text payload.
 type FrameTextCustom struct {
-	ID          FrameID `v22:"TXX" v23:"TXXX" v24:"TXXX"`
+	Type        FrameType
 	Encoding    Encoding
 	Description string
 	Text        string
@@ -269,7 +255,7 @@ type FrameTextCustom struct {
 // NewFrameTextCustom creates a new custom text frame payload.
 func NewFrameTextCustom(description, text string) *FrameTextCustom {
 	return &FrameTextCustom{
-		ID:          "TXXX",
+		Type:        FrameTypeTextCustom,
 		Encoding:    EncodingUTF8,
 		Description: description,
 		Text:        text,
@@ -278,7 +264,7 @@ func NewFrameTextCustom(description, text string) *FrameTextCustom {
 
 // FrameComment contains a full-text comment field.
 type FrameComment struct {
-	ID          FrameID `v22:"COM" v23:"COMM" v24:"COMM"`
+	Type        FrameType
 	Encoding    Encoding
 	Language    string `id3:"lang"`
 	Description string
@@ -288,7 +274,7 @@ type FrameComment struct {
 // NewFrameComment creates a new full-text comment frame.
 func NewFrameComment(language, description, text string) *FrameComment {
 	return &FrameComment{
-		ID:          "COMM",
+		Type:        FrameTypeComment,
 		Encoding:    EncodingUTF8,
 		Language:    language,
 		Description: description,
@@ -299,24 +285,42 @@ func NewFrameComment(language, description, text string) *FrameComment {
 // FrameURL may contain the payload of any type of URL frame except
 // for the user-defined WXXX URL frame.
 type FrameURL struct {
-	ID  FrameID `v22:"W" v23:"W" v24:"W"`
-	URL string  `id3:"iso88519"`
+	Type FrameType
+	URL  string `id3:"iso88519"`
+}
+
+// NewFrameURL creates a URL frame of the requested type.
+func NewFrameURL(typ FrameType, url string) *FrameURL {
+	return &FrameURL{
+		Type: typ,
+		URL:  url,
+	}
 }
 
 // FrameURLCustom contains a custom URL payload.
 type FrameURLCustom struct {
-	ID          FrameID `v22:"WXX" v23:"WXXX" v24:"WXXX"`
+	Type        FrameType
 	Encoding    Encoding
 	Description string
 	URL         string `id3:"iso88519"`
 }
 
+// NewFrameURLCustom creates a custom URL frame.
+func NewFrameURLCustom(description, url string) *FrameURLCustom {
+	return &FrameURLCustom{
+		Type:        FrameTypeURLCustom,
+		Encoding:    EncodingUTF8,
+		Description: description,
+		URL:         url,
+	}
+}
+
 // FrameAttachedPicture contains the payload of an image frame.
 type FrameAttachedPicture struct {
-	ID          FrameID `v22:"PIC" v23:"APIC" v24:"APIC"`
+	Type        FrameType
 	Encoding    Encoding
 	MimeType    string `id3:"iso88519"`
-	Type        PictureType
+	PictureType PictureType
 	Description string
 	Data        []byte
 }
@@ -324,10 +328,10 @@ type FrameAttachedPicture struct {
 // NewFrameAttachedPicture creates a new attached-picture frame.
 func NewFrameAttachedPicture(mimeType, description string, typ PictureType, data []byte) *FrameAttachedPicture {
 	return &FrameAttachedPicture{
-		ID:          "APIC",
+		Type:        FrameTypeAttachedPicture,
 		Encoding:    EncodingUTF8,
 		MimeType:    mimeType,
-		Type:        typ,
+		PictureType: typ,
 		Description: description,
 		Data:        data,
 	}
@@ -335,15 +339,15 @@ func NewFrameAttachedPicture(mimeType, description string, typ PictureType, data
 
 // FrameUniqueFileID contains a unique file identifier for the MP3.
 type FrameUniqueFileID struct {
-	ID         FrameID `v22:"UFI" v23:"UFID" v24:"UFID"`
-	Owner      string  `id3:"iso88519"`
-	Identifier string  `id3:"iso88519"`
+	Type       FrameType
+	Owner      string `id3:"iso88519"`
+	Identifier string `id3:"iso88519"`
 }
 
 // NewFrameUniqueFileID creates a new Unique FileID frame.
 func NewFrameUniqueFileID(owner, id string) *FrameUniqueFileID {
 	return &FrameUniqueFileID{
-		ID:         "UFID",
+		Type:       FrameTypeUniqueFileID,
 		Owner:      owner,
 		Identifier: id,
 	}
@@ -351,7 +355,7 @@ func NewFrameUniqueFileID(owner, id string) *FrameUniqueFileID {
 
 // FrameTermsOfUse contains the terms of use description for the MP3.
 type FrameTermsOfUse struct {
-	ID       FrameID `v23:"USER" v24:"USER"`
+	Type     FrameType
 	Encoding Encoding
 	Language string `id3:"lang"`
 	Text     string
@@ -360,7 +364,7 @@ type FrameTermsOfUse struct {
 // NewFrameTermsOfUser creates a new terms-of-use frame.
 func NewFrameTermsOfUse(language, text string) *FrameTermsOfUse {
 	return &FrameTermsOfUse{
-		ID:       "USER",
+		Type:     FrameTypeTermsOfUse,
 		Encoding: EncodingUTF8,
 		Language: language,
 		Text:     text,
@@ -370,7 +374,7 @@ func NewFrameTermsOfUse(language, text string) *FrameTermsOfUse {
 // FrameLyricsUnsync contains unsynchronized lyrics and text transcription
 // data.
 type FrameLyricsUnsync struct {
-	ID         FrameID `v22:"ULT" v23:"USLT" v24:"USLT"`
+	Type       FrameType
 	Encoding   Encoding
 	Language   string `id3:"lang"`
 	Descriptor string
@@ -380,7 +384,7 @@ type FrameLyricsUnsync struct {
 // NewFrameLyricsUnsync creates a new unsynchronized lyrics frame.
 func NewFrameLyricsUnsync(language, descriptor, lyrics string) *FrameLyricsUnsync {
 	return &FrameLyricsUnsync{
-		ID:         "USLT",
+		Type:       FrameTypeLyricsUnsync,
 		Encoding:   EncodingUTF8,
 		Language:   language,
 		Descriptor: descriptor,
@@ -397,25 +401,25 @@ type LyricsSync struct {
 
 // FrameLyricsSync contains synchronized lyrics or text information.
 type FrameLyricsSync struct {
-	ID         FrameID `v22:"SLT" v23:"SYLT" v24:"SYLT"`
-	Encoding   Encoding
-	Language   string `id3:"lang"`
-	Format     TimeStampFormat
-	Type       LyricContentType
-	Descriptor string
-	Sync       []LyricsSync
+	Type        FrameType
+	Encoding    Encoding
+	Language    string `id3:"lang"`
+	Format      TimeStampFormat
+	ContentType LyricContentType
+	Descriptor  string
+	Sync        []LyricsSync
 }
 
 // NewFrameLyricsSync creates a new synchronized lyrics frame.
 func NewFrameLyricsSync(language, descriptor string,
 	format TimeStampFormat, typ LyricContentType) *FrameLyricsSync {
 	return &FrameLyricsSync{
-		ID:       "SYLT",
-		Encoding: EncodingUTF8,
-		Language: language,
-		Format:   format,
-		Type:     typ,
-		Sync:     []LyricsSync{},
+		Type:        FrameTypeLyricsSync,
+		Encoding:    EncodingUTF8,
+		Language:    language,
+		Format:      format,
+		ContentType: typ,
+		Sync:        []LyricsSync{},
 	}
 }
 
@@ -446,7 +450,7 @@ type TempoSync struct {
 
 // FrameSyncTempoCodes contains synchronized tempo codes.
 type FrameSyncTempoCodes struct {
-	ID              FrameID `v22:"STC" v23:"SYTC" v24:"SYTC"`
+	Type            FrameType
 	TimeStampFormat TimeStampFormat
 	Sync            []TempoSync
 }
@@ -454,7 +458,7 @@ type FrameSyncTempoCodes struct {
 // NewFrameSyncTempoCodes creates a new synchronized tempo codes frame.
 func NewFrameSyncTempoCodes(format TimeStampFormat) *FrameSyncTempoCodes {
 	return &FrameSyncTempoCodes{
-		ID:              "SYTC",
+		Type:            FrameTypeSyncTempoCodes,
 		TimeStampFormat: format,
 		Sync:            []TempoSync{},
 	}
@@ -484,8 +488,8 @@ func (f *FrameSyncTempoCodes) AddSync(sync TempoSync) {
 // identifier, there will be a corresponding GRID frame with data
 // describing the group.
 type FrameGroupID struct {
-	ID      FrameID `v23:"GRID" v24:"GRID"`
-	Owner   string  `id3:"iso88519"`
+	Type    FrameType
+	Owner   string `id3:"iso88519"`
 	GroupID GroupSymbol
 	Data    []byte
 }
@@ -493,7 +497,7 @@ type FrameGroupID struct {
 // NewFrameGroupID creates a new group identifier frame.
 func NewFrameGroupID(owner string, groupID GroupSymbol, data []byte) *FrameGroupID {
 	return &FrameGroupID{
-		ID:      "GRID",
+		Type:    FrameTypeGroupID,
 		Owner:   owner,
 		GroupID: groupID,
 		Data:    data,
@@ -503,15 +507,15 @@ func NewFrameGroupID(owner string, groupID GroupSymbol, data []byte) *FrameGroup
 // FramePrivate contains private information specific to a software
 // producer.
 type FramePrivate struct {
-	ID    FrameID `v23:"PRIV" v24:"PRIV"`
-	Owner string  `id3:"iso88519"`
+	Type  FrameType
+	Owner string `id3:"iso88519"`
 	Data  []byte
 }
 
 // NewFramePrivate creates a new private information frame.
 func NewFramePrivate(owner string, data []byte) *FramePrivate {
 	return &FramePrivate{
-		ID:    "PRIV",
+		Type:  FrameTypePrivate,
 		Owner: owner,
 		Data:  data,
 	}
@@ -519,22 +523,22 @@ func NewFramePrivate(owner string, data []byte) *FramePrivate {
 
 // FramePlayCount tracks the number of times the MP3 file has been played.
 type FramePlayCount struct {
-	ID    FrameID `v22:"CNT" v23:"PCNT" v24:"PCNT"`
-	Count uint64  `id3:"counter"`
+	Type  FrameType
+	Count uint64 `id3:"counter"`
 }
 
 // NewFramePlayCount creates a new play count frame.
 func NewFramePlayCount(count uint64) *FramePlayCount {
 	return &FramePlayCount{
-		ID:    "PCNT",
+		Type:  FrameTypePlayCount,
 		Count: count,
 	}
 }
 
 // FramePopularimeter tracks the "popularimeter" value for an MP3 file.
 type FramePopularimeter struct {
-	ID     FrameID `v22:"POP" v23:"POPM" v24:"POPM"`
-	Email  string  `id3:"iso88519"`
+	Type   FrameType
+	Email  string `id3:"iso88519"`
 	Rating uint8
 	Count  uint64 `id3:"counter"`
 }
@@ -542,7 +546,7 @@ type FramePopularimeter struct {
 // NewFramePopularimeter creates a new "popularimeter" frame.
 func NewFramePopularimeter(email string, rating uint8, count uint64) *FramePopularimeter {
 	return &FramePopularimeter{
-		ID:     "POPM",
+		Type:   FrameTypePopularimeter,
 		Email:  email,
 		Rating: rating,
 		Count:  count,

@@ -8,7 +8,7 @@ import (
 
 // A Tag represents an entire ID3 tag, including zero or more frames.
 type Tag struct {
-	Version      uint8          // 2, 3 or 4 (for 2.2, 2.3 or 2.4)
+	Version      Version        // ID3 codec version (2.2, 2.3, or 2.4)
 	Flags        TagFlags       // Flags
 	Size         int            // Size not including the header
 	Padding      int            // Number of bytes of padding
@@ -32,13 +32,13 @@ const (
 	TagFlagHasRestrictions
 )
 
-func newCodec(v uint8) (codec, error) {
+func newCodec(v Version) (codec, error) {
 	switch v {
-	case 2:
+	case v22:
 		return newCodec22(), nil
-	case 3:
+	case v23:
 		return newCodec23(), nil
-	case 4:
+	case v24:
 		return newCodec24(), nil
 	default:
 		return nil, ErrInvalidVersion
@@ -64,9 +64,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	}
 
 	// Process the version number (2.2, 2.3, or 2.4).
-	t.Version = hdr[3]
-
-	// Choose a version-appropriate codec to process the data.
+	t.Version = Version(hdr[3])
 	codec, err := newCodec(t.Version)
 	if err != nil {
 		return n, err
@@ -185,7 +183,7 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 
 	// Create a buffer holding the 10-byte header.
 	flags := uint8(codec.HeaderFlags().Encode(uint32(t.Flags)))
-	hdr := []byte{'I', 'D', '3', t.Version, 0, flags, 0, 0, 0, 0}
+	hdr := []byte{'I', 'D', '3', byte(t.Version), 0, flags, 0, 0, 0, 0}
 	err = encodeSyncSafeUint32(hdr[6:10], uint32(len(b)))
 	if err != nil {
 		return 0, err

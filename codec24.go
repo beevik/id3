@@ -134,8 +134,22 @@ type property struct {
 // The state structure keeps track of persistent state required while
 // decoding a single frame.
 type state struct {
-	ID       FrameID
+	ID       string
 	encoding Encoding
+}
+
+// NewFrameHolder creates a new frame holder, which contains the header
+// and payload of an ID3 frame.
+func (c *codec24) NewFrameHolder(frame Frame) *FrameHolder {
+	t := reflect.ValueOf(frame).Elem()
+	id, ok := c.frameTypeToFrameID[FrameType(t.Field(0).Uint())]
+	if !ok {
+		id = "UUUU"
+	}
+	return &FrameHolder{
+		header: frameHeader{ID: id},
+		Frame:  frame,
+	}
 }
 
 func (c *codec24) HeaderFlags() flagMap {
@@ -214,7 +228,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *FrameHolder, r io.Reader) (int, error) 
 	if hdr[0] == 0 && hdr[1] == 0 && hdr[2] == 0 && hdr[3] == 0 {
 		return s.n, errPaddingEncountered
 	}
-	f.header.ID = FrameID(hdr[0:4])
+	f.header.ID = string(hdr[0:4])
 
 	// Read the rest of the header.
 	if s.Read(r, 6); s.err != nil {
@@ -280,7 +294,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *FrameHolder, r io.Reader) (int, error) 
 	return s.n, s.err
 }
 
-func (c *codec24) scanExtraHeaderData(s *scanner, h *FrameHeader) {
+func (c *codec24) scanExtraHeaderData(s *scanner, h *frameHeader) {
 	// If the frame is compressed, it must include a data length indicator.
 	if (h.Flags&FrameFlagCompressed) != 0 && (h.Flags&FrameFlagHasDataLength) == 0 {
 		s.err = ErrInvalidFrameFlags
@@ -366,11 +380,6 @@ func (c *codec24) scanString(s *scanner, p property, state *state) {
 		return
 	}
 
-	if p.typ.Name() == "FrameID" {
-		p.value.SetString(string(state.ID))
-		return
-	}
-
 	enc := state.encoding
 	if p.tags.Lookup("iso88519") {
 		enc = EncodingISO88591
@@ -444,7 +453,7 @@ func (c *codec24) scanUint8(s *scanner, p property, state *state) {
 		return
 	}
 
-	if p.tags.Lookup("texttype") {
+	if p.typ.Name() == "FrameType" {
 		ty, ok := c.frameIDToFrameType[string(state.ID)]
 		if !ok {
 			ty = FrameTypeUnknown
