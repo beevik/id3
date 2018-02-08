@@ -27,55 +27,73 @@ var v24FrameFlags = flagMap{
 	{1 << 0, uint32(FrameFlagHasDataLength)},
 }
 
-var v24TextTypeToFrameID = intToStringMap{
-	int(TextTypeGroupDescription):    "TIT1",
-	int(TextTypeSongTitle):           "TIT2",
-	int(TextTypeSongSubtitle):        "TIT3",
-	int(TextTypeAlbumName):           "TALB",
-	int(TextTypeOriginalAlbum):       "TOAL",
-	int(TextTypeTrackNumber):         "TRCK",
-	int(TextTypePartOfSet):           "TPOS",
-	int(TextTypeSetSubtitle):         "TSST",
-	int(TextTypeISRC):                "TSRC",
-	int(TextTypeArtist):              "TPE1",
-	int(TextTypeAlbumArtist):         "TPE2",
-	int(TextTypeConductor):           "TPE3",
-	int(TextTypeRemixer):             "TPE4",
-	int(TextTypeOriginalPerformer):   "TOPE",
-	int(TextTypeLyricist):            "TEXT",
-	int(TextTypeOriginalLyricist):    "TOLY",
-	int(TextTypeComposer):            "TCOM",
-	int(TextTypeMusicians):           "TMCL",
-	int(TextTypeInvolvedPeople):      "TIPL",
-	int(TextTypeEncodedBy):           "TENC",
-	int(TextTypeBPM):                 "TBPM",
-	int(TextTypeLengthInMs):          "TLEN",
-	int(TextTypeMusicalKey):          "TKEY",
-	int(TextTypeLanguage):            "TLAN",
-	int(TextTypeGenre):               "TCON",
-	int(TextTypeFileType):            "TFLT",
-	int(TextTypeMediaType):           "TMED",
-	int(TextTypeMood):                "TMOO",
-	int(TextTypeCopyright):           "TCOP",
-	int(TextTypeProducedNotice):      "TPRO",
-	int(TextTypePublisher):           "TPUB",
-	int(TextTypeOwner):               "TOWN",
-	int(TextTypeRadioStation):        "TRSN",
-	int(TextTypeRadioStationOwner):   "TRSO",
-	int(TextTypeOriginalFileName):    "TOFN",
-	int(TextTypePlaylistDelay):       "TDLY",
-	int(TextTypeEncodingTime):        "TDEN",
-	int(TextTypeOriginalReleaseTime): "TDOR",
-	int(TextTypeRecordingTime):       "TDRC",
-	int(TextTypeReleaseTime):         "TDRL",
-	int(TextTypeTaggingTime):         "TDTG",
-	int(TextTypeEncodingSoftware):    "TSSE",
-	int(TextTypeAlbumSortOrder):      "TSOA",
-	int(TextTypeTitleSortOrder):      "TSOT",
-	int(TextTypeUnknown):             "TUNK",
+var v24FrameTypeToFrameID = frameTypeToFrameID{
+	FrameTypeTextGroupDescription:    "TIT1",
+	FrameTypeTextSongTitle:           "TIT2",
+	FrameTypeTextSongSubtitle:        "TIT3",
+	FrameTypeTextAlbumName:           "TALB",
+	FrameTypeTextOriginalAlbum:       "TOAL",
+	FrameTypeTextTrackNumber:         "TRCK",
+	FrameTypeTextPartOfSet:           "TPOS",
+	FrameTypeTextSetSubtitle:         "TSST",
+	FrameTypeTextISRC:                "TSRC",
+	FrameTypeTextArtist:              "TPE1",
+	FrameTypeTextAlbumArtist:         "TPE2",
+	FrameTypeTextConductor:           "TPE3",
+	FrameTypeTextRemixer:             "TPE4",
+	FrameTypeTextOriginalPerformer:   "TOPE",
+	FrameTypeTextLyricist:            "TEXT",
+	FrameTypeTextOriginalLyricist:    "TOLY",
+	FrameTypeTextComposer:            "TCOM",
+	FrameTypeTextMusicians:           "TMCL",
+	FrameTypeTextInvolvedPeople:      "TIPL",
+	FrameTypeTextEncodedBy:           "TENC",
+	FrameTypeTextBPM:                 "TBPM",
+	FrameTypeTextLengthInMs:          "TLEN",
+	FrameTypeTextMusicalKey:          "TKEY",
+	FrameTypeTextLanguage:            "TLAN",
+	FrameTypeTextGenre:               "TCON",
+	FrameTypeTextFileType:            "TFLT",
+	FrameTypeTextMediaType:           "TMED",
+	FrameTypeTextMood:                "TMOO",
+	FrameTypeTextCopyright:           "TCOP",
+	FrameTypeTextProducedNotice:      "TPRO",
+	FrameTypeTextPublisher:           "TPUB",
+	FrameTypeTextOwner:               "TOWN",
+	FrameTypeTextRadioStation:        "TRSN",
+	FrameTypeTextRadioStationOwner:   "TRSO",
+	FrameTypeTextOriginalFileName:    "TOFN",
+	FrameTypeTextPlaylistDelay:       "TDLY",
+	FrameTypeTextEncodingTime:        "TDEN",
+	FrameTypeTextOriginalReleaseTime: "TDOR",
+	FrameTypeTextRecordingTime:       "TDRC",
+	FrameTypeTextReleaseTime:         "TDRL",
+	FrameTypeTextTaggingTime:         "TDTG",
+	FrameTypeTextEncodingSoftware:    "TSSE",
+	FrameTypeTextAlbumSortOrder:      "TSOA",
+	FrameTypeTextTitleSortOrder:      "TSOT",
+	FrameTypeURLCommercial:           "WCOM",
+	FrameTypeURLCopyright:            "WCOP",
+	FrameTypeURLAudioFile:            "WOAF",
+	FrameTypeURLArtist:               "WOAR",
+	FrameTypeURLAudioSource:          "WOAS",
+	FrameTypeURLRadioStation:         "WORS",
+	FrameTypeURLPayment:              "WPAY",
+	FrameTypeURLPublisher:            "WPUB",
+	FrameTypeURLCustom:               "WXXX",
+	FrameTypeComment:                 "COMM",
+	FrameTypeAttachedPicture:         "APIC",
+	FrameTypeUniqueFileID:            "UFID",
+	FrameTypeTermsOfUse:              "USER",
+	FrameTypeLyricsUnsync:            "USLT",
+	FrameTypeLyricsSync:              "SYLT",
+	FrameTypeSyncTempoCodes:          "SYTC",
+	FrameTypeGroupID:                 "GRID",
+	FrameTypePrivate:                 "PRIV",
+	FrameTypePlayCount:               "PCNT",
+	FrameTypePopularimeter:           "POPM",
+	FrameTypeUnknown:                 "UUUU",
 }
-
-var v24FrameIDToTextType = v24TextTypeToFrameID.Reverse()
 
 var v24TypeBoundsMap = boundsMap{
 	"Encoding":         {0, 3},
@@ -86,22 +104,24 @@ var v24TypeBoundsMap = boundsMap{
 }
 
 type codec24 struct {
-	frameTypes        typeMap
-	headerFlags       flagMap
-	frameFlags        flagMap
-	frameIDToTextType stringToIntMap
-	textTypeToFrameID intToStringMap
-	bounds            boundsMap
+	frameTypes           typeMap
+	headerFlags          flagMap
+	frameFlags           flagMap
+	frameTypeToFrameID   frameTypeToFrameID
+	frameIDToFrameType   frameIDToFrameType
+	frameIDToReflectType frameIDToReflectType
+	bounds               boundsMap
 }
 
 func newCodec24() *codec24 {
 	return &codec24{
-		frameTypes:        newTypeMap("v24"),
-		headerFlags:       v24HeaderFlags,
-		frameFlags:        v24FrameFlags,
-		frameIDToTextType: v24FrameIDToTextType,
-		textTypeToFrameID: v24TextTypeToFrameID,
-		bounds:            v24TypeBoundsMap,
+		frameTypes:           newTypeMap("v24"),
+		headerFlags:          v24HeaderFlags,
+		frameFlags:           v24FrameFlags,
+		frameTypeToFrameID:   v24FrameTypeToFrameID,
+		frameIDToFrameType:   v24FrameTypeToFrameID.Reverse(),
+		frameIDToReflectType: makeFrameIDToReflectType(v24FrameTypeToFrameID),
+		bounds:               v24TypeBoundsMap,
 	}
 }
 
@@ -424,9 +444,9 @@ func (c *codec24) scanUint8(s *scanner, p property, state *state) {
 	}
 
 	if p.tags.Lookup("texttype") {
-		ty, ok := c.frameIDToTextType[string(state.ID)]
+		ty, ok := c.frameIDToFrameType[string(state.ID)]
 		if !ok {
-			ty = int(TextTypeUnknown)
+			ty = FrameTypeUnknown
 		}
 		p.value.SetUint(uint64(ty))
 		return

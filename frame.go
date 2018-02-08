@@ -86,73 +86,100 @@ const (
 	PictureTypePublisherLogotype
 )
 
-// A TextType value identifies the type of an ID3 text frame.
-type TextType uint8
+// A FrameType value identifies the type of an ID3 frame.
+type FrameType uint8
 
 // All standard types of text frames.
 const (
-	// Identification (ID3v2.4 spec section 4.2.1)
-	TextTypeGroupDescription TextType = iota // TIT1
-	TextTypeSongTitle                        // TIT2
-	TextTypeSongSubtitle                     // TIT3
-	TextTypeAlbumName                        // TALB
-	TextTypeOriginalAlbum                    // TOAL
-	TextTypeTrackNumber                      // TRCK
-	TextTypePartOfSet                        // TPOS
-	TextTypeSetSubtitle                      // TSST (v2.4 only)
-	TextTypeISRC                             // TSRC
+	// Text frames: Identification (ID3v2.4 spec section 4.2.1)
+	FrameTypeTextGroupDescription FrameType = iota // TIT1
+	FrameTypeTextSongTitle                         // TIT2
+	FrameTypeTextSongSubtitle                      // TIT3
+	FrameTypeTextAlbumName                         // TALB
+	FrameTypeTextOriginalAlbum                     // TOAL
+	FrameTypeTextTrackNumber                       // TRCK
+	FrameTypeTextPartOfSet                         // TPOS
+	FrameTypeTextSetSubtitle                       // TSST (v2.4 only)
+	FrameTypeTextISRC                              // TSRC
 
-	// Involved persons (ID3v2.4 spec section 4.2.2)
-	TextTypeArtist            // TPE1
-	TextTypeAlbumArtist       // TPE2
-	TextTypeConductor         // TPE3
-	TextTypeRemixer           // TPE4
-	TextTypeOriginalPerformer // TOPE
-	TextTypeLyricist          // TEXT
-	TextTypeOriginalLyricist  // TOLY
-	TextTypeComposer          // TCOM
-	TextTypeMusicians         // TMCL (v2.4 only)
-	TextTypeInvolvedPeople    // TIPL (v2.4 only)
-	TextTypeEncodedBy         // TENC
+	// Text frames: Involved persons (ID3v2.4 spec section 4.2.2)
+	FrameTypeTextArtist            // TPE1
+	FrameTypeTextAlbumArtist       // TPE2
+	FrameTypeTextConductor         // TPE3
+	FrameTypeTextRemixer           // TPE4
+	FrameTypeTextOriginalPerformer // TOPE
+	FrameTypeTextLyricist          // TEXT
+	FrameTypeTextOriginalLyricist  // TOLY
+	FrameTypeTextComposer          // TCOM
+	FrameTypeTextMusicians         // TMCL (v2.4 only)
+	FrameTypeTextInvolvedPeople    // TIPL (v2.4 only)
+	FrameTypeTextEncodedBy         // TENC
 
-	// Derived and subjective properties (ID3v2.4 spec section 4.2.3)
-	TextTypeBPM        // TBPM
-	TextTypeLengthInMs // TLEN
-	TextTypeMusicalKey // TKEY
-	TextTypeLanguage   // TLAN
-	TextTypeGenre      // TCON (see Genre)
-	TextTypeFileType   // TFLT (see FileType)
-	TextTypeMediaType  // TMED
-	TextTypeMood       // TMOO (v2.4 only)
+	// Text frames: Derived and subjective properties (ID3v2.4 spec section 4.2.3)
+	FrameTypeTextBPM        // TBPM
+	FrameTypeTextLengthInMs // TLEN
+	FrameTypeTextMusicalKey // TKEY
+	FrameTypeTextLanguage   // TLAN
+	FrameTypeTextGenre      // TCON (see Genre)
+	FrameTypeTextFileType   // TFLT (see FileType)
+	FrameTypeTextMediaType  // TMED
+	FrameTypeTextMood       // TMOO (v2.4 only)
 
-	// Rights and license (ID3v2.4 spec section 4.2.4)
-	TextTypeCopyright         // TCOP
-	TextTypeProducedNotice    // TPRO (v2.4 only)
-	TextTypePublisher         // TPUB
-	TextTypeOwner             // TOWN
-	TextTypeRadioStation      // TRSN
-	TextTypeRadioStationOwner // TRSO
+	// Text frames: Rights and license (ID3v2.4 spec section 4.2.4)
+	FrameTypeTextCopyright         // TCOP
+	FrameTypeTextProducedNotice    // TPRO (v2.4 only)
+	FrameTypeTextPublisher         // TPUB
+	FrameTypeTextOwner             // TOWN
+	FrameTypeTextRadioStation      // TRSN
+	FrameTypeTextRadioStationOwner // TRSO
 
-	// Other text frames (ID3v2.4 spec section 4.2.5)
-	TextTypeOriginalFileName    // TOFN
-	TextTypePlaylistDelay       // TDLY
-	TextTypeEncodingTime        // TDEN (v2.4 only)
-	TextTypeOriginalReleaseTime // TDOR (v2.4) or TORY (v2.3)
-	TextTypeRecordingTime       // TDRC (v2.4) or TYER (v2.3)
-	TextTypeReleaseTime         // TDRL (v2.4 only)
-	TextTypeTaggingTime         // TDTG (v2.4 only)
-	TextTypeEncodingSoftware    // TSSE
-	TextTypeAlbumSortOrder      // TSOA (v2.4 only)
-	TextTypeTitleSortOrder      // TSOT (v2.4 only)
+	// Text frames: Other text frames (ID3v2.4 spec section 4.2.5)
+	FrameTypeTextOriginalFileName    // TOFN
+	FrameTypeTextPlaylistDelay       // TDLY
+	FrameTypeTextEncodingTime        // TDEN (v2.4 only)
+	FrameTypeTextOriginalReleaseTime // TDOR (v2.4) or TORY (v2.3)
+	FrameTypeTextRecordingTime       // TDRC (v2.4) or TYER (v2.3)
+	FrameTypeTextReleaseTime         // TDRL (v2.4 only)
+	FrameTypeTextTaggingTime         // TDTG (v2.4 only)
+	FrameTypeTextEncodingSoftware    // TSSE
+	FrameTypeTextAlbumSortOrder      // TSOA (v2.4 only)
+	FrameTypeTextTitleSortOrder      // TSOT (v2.4 only)
 
-	// v2.3-only frames (ID3v2.3 spec)
-	TextTypeDate           // TDAT (subsumed by TDRC in v2.4)
-	TextTypeTime           // TIME (subsumed by TDRC in v2.4)
-	TextTypeRecordingDates // TRDA (subsumed by TDRC in v2.4)
-	TextTypeSize           // TSIZ
+	// Text frames: v2.3-only frames (ID3v2.3 spec)
+	FrameTypeTextDate           // TDAT (subsumed by TDRC in v2.4)
+	FrameTypeTextTime           // TIME (subsumed by TDRC in v2.4)
+	FrameTypeTextRecordingDates // TRDA (subsumed by TDRC in v2.4)
+	FrameTypeTextSize           // TSIZ
+
+	// Text frames: custom text
+	FrameTypeTextCustom // TXXX
+
+	// URL frames
+	FrameTypeURLCommercial   // WCOM
+	FrameTypeURLCopyright    // WCOP
+	FrameTypeURLAudioFile    // WOAF
+	FrameTypeURLArtist       // WOAR
+	FrameTypeURLAudioSource  // WOAS
+	FrameTypeURLRadioStation // WORS
+	FrameTypeURLPayment      // WPAY
+	FrameTypeURLPublisher    // WPUB
+	FrameTypeURLCustom       // WXXX
+
+	// Other frames
+	FrameTypeComment         // COMM
+	FrameTypeAttachedPicture // APIC
+	FrameTypeUniqueFileID    // UFID
+	FrameTypeTermsOfUse      // USER
+	FrameTypeLyricsUnsync    // USLT
+	FrameTypeLyricsSync      // SYLT
+	FrameTypeSyncTempoCodes  // SYTC
+	FrameTypeGroupID         // GRID
+	FrameTypePrivate         // PRIV
+	FrameTypePlayCount       // PCNT
+	FrameTypePopularimeter   // POPM
 
 	// Non-standard values
-	TextTypeUnknown
+	FrameTypeUnknown
 )
 
 // TimeStampFormat indicates the type of time stamp used: milliseconds or
@@ -215,16 +242,16 @@ type FrameUnknown struct {
 // may contain one or more text strings.  In all other versions, only one
 // text string may appear.
 type FrameText struct {
-	ID       FrameID  `v22:"T" v23:"T" v24:"T"`
-	Type     TextType `id3:"texttype"`
+	ID       FrameID   `v22:"T" v23:"T" v24:"T"`
+	Type     FrameType `id3:"texttype"`
 	Encoding Encoding
 	Text     []string
 }
 
 // NewFrameText creates a new text frame payload with a single text string.
-func NewFrameText(typ TextType, text string) *FrameText {
+func NewFrameText(typ FrameType, text string) *FrameText {
 	return &FrameText{
-		ID:       FrameID(v24TextTypeToFrameID[int(typ)]),
+		ID:       FrameID(v24FrameTypeToFrameID[typ]),
 		Type:     typ,
 		Encoding: EncodingUTF8,
 		Text:     []string{text},
@@ -278,7 +305,7 @@ type FrameURL struct {
 
 // FrameURLCustom contains a custom URL payload.
 type FrameURLCustom struct {
-	ID          FrameID `v22:"WXX" v23:"WXXX" v24:"WXXXX"`
+	ID          FrameID `v22:"WXX" v23:"WXXX" v24:"WXXX"`
 	Encoding    Encoding
 	Description string
 	URL         string `id3:"iso88519"`
@@ -523,10 +550,108 @@ func NewFramePopularimeter(email string, rating uint8, count uint64) *FramePopul
 }
 
 // frameTypes holds all possible frame payload types supported by ID3.
+var frameData = []struct {
+	ftype FrameType
+	rtype reflect.Type
+}{
+	{FrameTypeUnknown, reflect.TypeOf(FrameUnknown{})},
+	{FrameTypeTextAlbumArtist, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextGroupDescription, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextSongTitle, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextSongSubtitle, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextAlbumName, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextOriginalAlbum, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextTrackNumber, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextPartOfSet, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextSetSubtitle, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextISRC, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextArtist, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextAlbumArtist, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextConductor, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextRemixer, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextOriginalPerformer, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextLyricist, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextOriginalLyricist, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextComposer, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextMusicians, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextInvolvedPeople, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextEncodedBy, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextBPM, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextLengthInMs, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextMusicalKey, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextLanguage, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextGenre, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextFileType, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextMediaType, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextMood, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextCopyright, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextProducedNotice, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextPublisher, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextOwner, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextRadioStation, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextRadioStationOwner, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextOriginalFileName, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextPlaylistDelay, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextEncodingTime, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextOriginalReleaseTime, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextRecordingTime, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextReleaseTime, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextTaggingTime, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextEncodingSoftware, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextAlbumSortOrder, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextTitleSortOrder, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextDate, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextTime, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextRecordingDates, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextSize, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextCustom, reflect.TypeOf(FrameText{})},
+	{FrameTypeURLCommercial, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLCopyright, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLAudioFile, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLArtist, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLAudioSource, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLRadioStation, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLPayment, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLPublisher, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLCustom, reflect.TypeOf(FrameURL{})},
+	{FrameTypeComment, reflect.TypeOf(FrameComment{})},
+	{FrameTypeAttachedPicture, reflect.TypeOf(FrameAttachedPicture{})},
+	{FrameTypeUniqueFileID, reflect.TypeOf(FrameUniqueFileID{})},
+	{FrameTypeTermsOfUse, reflect.TypeOf(FrameTermsOfUse{})},
+	{FrameTypeLyricsUnsync, reflect.TypeOf(FrameLyricsUnsync{})},
+	{FrameTypeLyricsSync, reflect.TypeOf(FrameLyricsSync{})},
+	{FrameTypeSyncTempoCodes, reflect.TypeOf(FrameSyncTempoCodes{})},
+	{FrameTypeGroupID, reflect.TypeOf(FrameGroupID{})},
+	{FrameTypePrivate, reflect.TypeOf(FramePrivate{})},
+	{FrameTypePlayCount, reflect.TypeOf(FramePlayCount{})},
+	{FrameTypePopularimeter, reflect.TypeOf(FramePopularimeter{})},
+}
+
+type frameTypeToFrameID map[FrameType]string
+type frameIDToReflectType map[string]reflect.Type
+type frameIDToFrameType map[string]FrameType
+
+func makeFrameIDToReflectType(ftoi frameTypeToFrameID) frameIDToReflectType {
+	m := make(frameIDToReflectType)
+	for _, d := range frameData {
+		id := ftoi[d.ftype]
+		m[id] = d.rtype
+	}
+	return m
+}
+
+func (m frameTypeToFrameID) Reverse() frameIDToFrameType {
+	mm := make(frameIDToFrameType)
+	for k, v := range m {
+		mm[v] = k
+	}
+	return mm
+}
+
 var frameTypes = []reflect.Type{
 	reflect.TypeOf(FrameUnknown{}),
 	reflect.TypeOf(FrameText{}),
-	reflect.TypeOf(FrameTextCustom{}),
+	reflect.TypeOf(FrameText{}),
 	reflect.TypeOf(FrameComment{}),
 	reflect.TypeOf(FrameURL{}),
 	reflect.TypeOf(FrameURLCustom{}),
