@@ -9,117 +9,105 @@ import (
 // codec24
 //
 
-var v24HeaderFlags = flagMap{
-	{1 << 7, uint32(TagFlagUnsync)},
-	{1 << 6, uint32(TagFlagExtended)},
-	{1 << 5, uint32(TagFlagExperimental)},
-	{1 << 4, uint32(TagFlagFooter)},
-}
-
-var v24FrameFlags = flagMap{
-	{1 << 14, uint32(FrameFlagDiscardOnTagAlteration)},
-	{1 << 13, uint32(FrameFlagDiscardOnFileAlteration)},
-	{1 << 12, uint32(FrameFlagReadOnly)},
-	{1 << 6, uint32(FrameFlagHasGroupInfo)},
-	{1 << 3, uint32(FrameFlagCompressed)},
-	{1 << 2, uint32(FrameFlagEncrypted)},
-	{1 << 1, uint32(FrameFlagUnsynchronized)},
-	{1 << 0, uint32(FrameFlagHasDataLength)},
-}
-
-var v24FrameTypeToFrameID = frameTypeToFrameID{
-	FrameTypeTextGroupDescription:    "TIT1",
-	FrameTypeTextSongTitle:           "TIT2",
-	FrameTypeTextSongSubtitle:        "TIT3",
-	FrameTypeTextAlbumName:           "TALB",
-	FrameTypeTextOriginalAlbum:       "TOAL",
-	FrameTypeTextTrackNumber:         "TRCK",
-	FrameTypeTextPartOfSet:           "TPOS",
-	FrameTypeTextSetSubtitle:         "TSST",
-	FrameTypeTextISRC:                "TSRC",
-	FrameTypeTextArtist:              "TPE1",
-	FrameTypeTextAlbumArtist:         "TPE2",
-	FrameTypeTextConductor:           "TPE3",
-	FrameTypeTextRemixer:             "TPE4",
-	FrameTypeTextOriginalPerformer:   "TOPE",
-	FrameTypeTextLyricist:            "TEXT",
-	FrameTypeTextOriginalLyricist:    "TOLY",
-	FrameTypeTextComposer:            "TCOM",
-	FrameTypeTextMusicians:           "TMCL",
-	FrameTypeTextInvolvedPeople:      "TIPL",
-	FrameTypeTextEncodedBy:           "TENC",
-	FrameTypeTextBPM:                 "TBPM",
-	FrameTypeTextLengthInMs:          "TLEN",
-	FrameTypeTextMusicalKey:          "TKEY",
-	FrameTypeTextLanguage:            "TLAN",
-	FrameTypeTextGenre:               "TCON",
-	FrameTypeTextFileType:            "TFLT",
-	FrameTypeTextMediaType:           "TMED",
-	FrameTypeTextMood:                "TMOO",
-	FrameTypeTextCopyright:           "TCOP",
-	FrameTypeTextProducedNotice:      "TPRO",
-	FrameTypeTextPublisher:           "TPUB",
-	FrameTypeTextOwner:               "TOWN",
-	FrameTypeTextRadioStation:        "TRSN",
-	FrameTypeTextRadioStationOwner:   "TRSO",
-	FrameTypeTextOriginalFileName:    "TOFN",
-	FrameTypeTextPlaylistDelay:       "TDLY",
-	FrameTypeTextEncodingTime:        "TDEN",
-	FrameTypeTextOriginalReleaseTime: "TDOR",
-	FrameTypeTextRecordingTime:       "TDRC",
-	FrameTypeTextReleaseTime:         "TDRL",
-	FrameTypeTextTaggingTime:         "TDTG",
-	FrameTypeTextEncodingSoftware:    "TSSE",
-	FrameTypeTextAlbumSortOrder:      "TSOA",
-	FrameTypeTextTitleSortOrder:      "TSOT",
-	FrameTypeURLCommercial:           "WCOM",
-	FrameTypeURLCopyright:            "WCOP",
-	FrameTypeURLAudioFile:            "WOAF",
-	FrameTypeURLArtist:               "WOAR",
-	FrameTypeURLAudioSource:          "WOAS",
-	FrameTypeURLRadioStation:         "WORS",
-	FrameTypeURLPayment:              "WPAY",
-	FrameTypeURLPublisher:            "WPUB",
-	FrameTypeURLCustom:               "WXXX",
-	FrameTypeComment:                 "COMM",
-	FrameTypeAttachedPicture:         "APIC",
-	FrameTypeUniqueFileID:            "UFID",
-	FrameTypeTermsOfUse:              "USER",
-	FrameTypeLyricsUnsync:            "USLT",
-	FrameTypeLyricsSync:              "SYLT",
-	FrameTypeSyncTempoCodes:          "SYTC",
-	FrameTypeGroupID:                 "GRID",
-	FrameTypePrivate:                 "PRIV",
-	FrameTypePlayCount:               "PCNT",
-	FrameTypePopularimeter:           "POPM",
-	FrameTypeUnknown:                 "UUUU",
-}
-
-var v24TypeBoundsMap = boundsMap{
-	"Encoding":         {0, 3},
-	"GroupSymbol":      {0x80, 0xf0},
-	"PictureType":      {0, 20},
-	"TimeStampFormat":  {1, 2},
-	"LyricContentType": {0, 8},
-}
-
 type codec24 struct {
-	headerFlags          flagMap
-	frameFlags           flagMap
-	frameTypeToFrameID   frameTypeToFrameID
-	frameIDToFrameType   frameIDToFrameType
-	frameIDToReflectType frameIDToReflectType
-	bounds               boundsMap
+	headerFlags flagMap
+	frameFlags  flagMap
+	bounds      boundsMap
+	frameTypes  *frameTypeMap
 }
 
 func newCodec24() *codec24 {
 	return &codec24{
-		headerFlags:          v24HeaderFlags,
-		frameFlags:           v24FrameFlags,
-		frameTypeToFrameID:   v24FrameTypeToFrameID,
-		frameIDToFrameType:   v24FrameTypeToFrameID.Reverse(),
-		frameIDToReflectType: makeFrameIDToReflectType(v24FrameTypeToFrameID),
-		bounds:               v24TypeBoundsMap,
+		headerFlags: flagMap{
+			{1 << 7, uint32(TagFlagUnsync)},
+			{1 << 6, uint32(TagFlagExtended)},
+			{1 << 5, uint32(TagFlagExperimental)},
+			{1 << 4, uint32(TagFlagFooter)},
+		},
+		frameFlags: flagMap{
+			{1 << 14, uint32(FrameFlagDiscardOnTagAlteration)},
+			{1 << 13, uint32(FrameFlagDiscardOnFileAlteration)},
+			{1 << 12, uint32(FrameFlagReadOnly)},
+			{1 << 6, uint32(FrameFlagHasGroupInfo)},
+			{1 << 3, uint32(FrameFlagCompressed)},
+			{1 << 2, uint32(FrameFlagEncrypted)},
+			{1 << 1, uint32(FrameFlagUnsynchronized)},
+			{1 << 0, uint32(FrameFlagHasDataLength)},
+		},
+		bounds: boundsMap{
+			"Encoding":         {0, 3},
+			"GroupSymbol":      {0x80, 0xf0},
+			"PictureType":      {0, 20},
+			"TimeStampFormat":  {1, 2},
+			"LyricContentType": {0, 8},
+		},
+		frameTypes: newFrameTypeMap(map[FrameType]string{
+			FrameTypeTextGroupDescription:    "TIT1",
+			FrameTypeTextSongTitle:           "TIT2",
+			FrameTypeTextSongSubtitle:        "TIT3",
+			FrameTypeTextAlbumName:           "TALB",
+			FrameTypeTextOriginalAlbum:       "TOAL",
+			FrameTypeTextTrackNumber:         "TRCK",
+			FrameTypeTextPartOfSet:           "TPOS",
+			FrameTypeTextSetSubtitle:         "TSST",
+			FrameTypeTextISRC:                "TSRC",
+			FrameTypeTextArtist:              "TPE1",
+			FrameTypeTextAlbumArtist:         "TPE2",
+			FrameTypeTextConductor:           "TPE3",
+			FrameTypeTextRemixer:             "TPE4",
+			FrameTypeTextOriginalPerformer:   "TOPE",
+			FrameTypeTextLyricist:            "TEXT",
+			FrameTypeTextOriginalLyricist:    "TOLY",
+			FrameTypeTextComposer:            "TCOM",
+			FrameTypeTextMusicians:           "TMCL",
+			FrameTypeTextInvolvedPeople:      "TIPL",
+			FrameTypeTextEncodedBy:           "TENC",
+			FrameTypeTextBPM:                 "TBPM",
+			FrameTypeTextLengthInMs:          "TLEN",
+			FrameTypeTextMusicalKey:          "TKEY",
+			FrameTypeTextLanguage:            "TLAN",
+			FrameTypeTextGenre:               "TCON",
+			FrameTypeTextFileType:            "TFLT",
+			FrameTypeTextMediaType:           "TMED",
+			FrameTypeTextMood:                "TMOO",
+			FrameTypeTextCopyright:           "TCOP",
+			FrameTypeTextProducedNotice:      "TPRO",
+			FrameTypeTextPublisher:           "TPUB",
+			FrameTypeTextOwner:               "TOWN",
+			FrameTypeTextRadioStation:        "TRSN",
+			FrameTypeTextRadioStationOwner:   "TRSO",
+			FrameTypeTextOriginalFileName:    "TOFN",
+			FrameTypeTextPlaylistDelay:       "TDLY",
+			FrameTypeTextEncodingTime:        "TDEN",
+			FrameTypeTextOriginalReleaseTime: "TDOR",
+			FrameTypeTextRecordingTime:       "TDRC",
+			FrameTypeTextReleaseTime:         "TDRL",
+			FrameTypeTextTaggingTime:         "TDTG",
+			FrameTypeTextEncodingSoftware:    "TSSE",
+			FrameTypeTextAlbumSortOrder:      "TSOA",
+			FrameTypeTextTitleSortOrder:      "TSOT",
+			FrameTypeURLCommercial:           "WCOM",
+			FrameTypeURLCopyright:            "WCOP",
+			FrameTypeURLAudioFile:            "WOAF",
+			FrameTypeURLArtist:               "WOAR",
+			FrameTypeURLAudioSource:          "WOAS",
+			FrameTypeURLRadioStation:         "WORS",
+			FrameTypeURLPayment:              "WPAY",
+			FrameTypeURLPublisher:            "WPUB",
+			FrameTypeURLCustom:               "WXXX",
+			FrameTypeComment:                 "COMM",
+			FrameTypeAttachedPicture:         "APIC",
+			FrameTypeUniqueFileID:            "UFID",
+			FrameTypeTermsOfUse:              "USER",
+			FrameTypeLyricsUnsync:            "USLT",
+			FrameTypeLyricsSync:              "SYLT",
+			FrameTypeSyncTempoCodes:          "SYTC",
+			FrameTypeGroupID:                 "GRID",
+			FrameTypePrivate:                 "PRIV",
+			FrameTypePlayCount:               "PCNT",
+			FrameTypePopularimeter:           "POPM",
+			FrameTypeUnknown:                 "ZZZZ",
+		}),
 	}
 }
 
@@ -134,7 +122,7 @@ type property struct {
 // The state structure keeps track of persistent state required while
 // decoding a single frame.
 type state struct {
-	ID       string
+	frameID  string
 	encoding Encoding
 }
 
@@ -142,12 +130,10 @@ type state struct {
 // and payload of an ID3 frame.
 func (c *codec24) NewFrameHolder(frame Frame) *FrameHolder {
 	t := reflect.ValueOf(frame).Elem()
-	id, ok := c.frameTypeToFrameID[FrameType(t.Field(0).Uint())]
-	if !ok {
-		id = "UUUU"
-	}
+	ft := FrameType(t.Field(0).Uint())
+	id := c.frameTypes.LookupFrameID(ft)
 	return &FrameHolder{
-		header: frameHeader{ID: id},
+		header: FrameHeader{ID: id},
 		Frame:  frame,
 	}
 }
@@ -270,15 +256,12 @@ func (c *codec24) DecodeFrame(t *Tag, f *FrameHolder, r io.Reader) (int, error) 
 
 	// Initialize the frame payload scan state.
 	state := state{
-		ID:       f.header.ID,
+		frameID:  f.header.ID,
 		encoding: EncodingISO88591,
 	}
 
 	// Select a frame payload type and scan its structure.
-	typ, ok := c.frameIDToReflectType[string(f.header.ID)]
-	if !ok {
-		typ = reflect.TypeOf(&FrameUnknown{})
-	}
+	typ := c.frameTypes.LookupReflectType(f.header.ID)
 	p := property{
 		typ:   typ,
 		tags:  emptyTagList,
@@ -294,7 +277,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *FrameHolder, r io.Reader) (int, error) 
 	return s.n, s.err
 }
 
-func (c *codec24) scanExtraHeaderData(s *scanner, h *frameHeader) {
+func (c *codec24) scanExtraHeaderData(s *scanner, h *FrameHeader) {
 	// If the frame is compressed, it must include a data length indicator.
 	if (h.Flags&FrameFlagCompressed) != 0 && (h.Flags&FrameFlagHasDataLength) == 0 {
 		s.err = ErrInvalidFrameFlags
@@ -380,6 +363,11 @@ func (c *codec24) scanString(s *scanner, p property, state *state) {
 		return
 	}
 
+	if p.typ.Name() == "FrameID" {
+		p.value.SetString(state.frameID)
+		return
+	}
+
 	enc := state.encoding
 	if p.tags.Lookup("iso88519") {
 		enc = EncodingISO88591
@@ -454,11 +442,8 @@ func (c *codec24) scanUint8(s *scanner, p property, state *state) {
 	}
 
 	if p.typ.Name() == "FrameType" {
-		ty, ok := c.frameIDToFrameType[string(state.ID)]
-		if !ok {
-			ty = FrameTypeUnknown
-		}
-		p.value.SetUint(uint64(ty))
+		typ := c.frameTypes.LookupFrameType(state.frameID)
+		p.value.SetUint(uint64(typ))
 		return
 	}
 

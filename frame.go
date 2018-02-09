@@ -5,7 +5,7 @@ import "reflect"
 // A FrameHolder holds the header and payload of an ID3 frame.
 // DEPRECATED.
 type FrameHolder struct {
-	header frameHeader
+	header FrameHeader
 	Frame  Frame
 }
 
@@ -19,8 +19,8 @@ func (f *FrameHolder) ID() string {
 	return f.header.ID
 }
 
-// A frameHeader holds the data described by a frame header.
-type frameHeader struct {
+// A FrameHeader holds the data described by a frame header.
+type FrameHeader struct {
 	ID            string      // Frame ID string
 	Size          int         // Frame size not including 10-byte header
 	Flags         FrameFlags  // Flags
@@ -221,8 +221,9 @@ type Frame interface {
 // FrameUnknown contains the payload of any frame whose ID is
 // unknown to this package.
 type FrameUnknown struct {
-	Type FrameType
-	Data []byte
+	Type    FrameType
+	FrameID string
+	Data    []byte
 }
 
 // FrameText may contain the payload of any type of text frame
@@ -361,7 +362,7 @@ type FrameTermsOfUse struct {
 	Text     string
 }
 
-// NewFrameTermsOfUser creates a new terms-of-use frame.
+// NewFrameTermsOfUse creates a new terms-of-use frame.
 func NewFrameTermsOfUse(language, text string) *FrameTermsOfUse {
 	return &FrameTermsOfUse{
 		Type:     FrameTypeTermsOfUse,
@@ -555,8 +556,8 @@ func NewFramePopularimeter(email string, rating uint8, count uint64) *FramePopul
 
 // frameTypes holds all possible frame payload types supported by ID3.
 var frameData = []struct {
-	ftype FrameType
-	rtype reflect.Type
+	frameType   FrameType
+	reflectType reflect.Type
 }{
 	{FrameTypeUnknown, reflect.TypeOf(FrameUnknown{})},
 	{FrameTypeTextAlbumArtist, reflect.TypeOf(FrameText{})},
@@ -631,42 +632,50 @@ var frameData = []struct {
 	{FrameTypePopularimeter, reflect.TypeOf(FramePopularimeter{})},
 }
 
-type frameTypeToFrameID map[FrameType]string
-type frameIDToReflectType map[string]reflect.Type
-type frameIDToFrameType map[string]FrameType
+type frameTypeMap struct {
+	FrameTypeToFrameID   map[FrameType]string
+	FrameIDToReflectType map[string]reflect.Type
+	FrameIDToFrameType   map[string]FrameType
+}
 
-func makeFrameIDToReflectType(ftoi frameTypeToFrameID) frameIDToReflectType {
-	m := make(frameIDToReflectType)
+func newFrameTypeMap(frameTypeToFrameID map[FrameType]string) *frameTypeMap {
+	m := &frameTypeMap{}
+	m.FrameTypeToFrameID = frameTypeToFrameID
+
+	m.FrameIDToReflectType = make(map[string]reflect.Type)
 	for _, d := range frameData {
-		id := ftoi[d.ftype]
-		m[id] = d.rtype
+		id := m.FrameTypeToFrameID[d.frameType]
+		m.FrameIDToReflectType[id] = d.reflectType
 	}
+
+	m.FrameIDToFrameType = make(map[string]FrameType)
+	for k, v := range m.FrameTypeToFrameID {
+		m.FrameIDToFrameType[v] = k
+	}
+
 	return m
 }
 
-func (m frameTypeToFrameID) Reverse() frameIDToFrameType {
-	mm := make(frameIDToFrameType)
-	for k, v := range m {
-		mm[v] = k
+func (m *frameTypeMap) LookupFrameID(t FrameType) string {
+	id, ok := m.FrameTypeToFrameID[t]
+	if !ok {
+		id = m.FrameTypeToFrameID[FrameTypeUnknown]
 	}
-	return mm
+	return id
 }
 
-var frameTypes = []reflect.Type{
-	reflect.TypeOf(FrameUnknown{}),
-	reflect.TypeOf(FrameText{}),
-	reflect.TypeOf(FrameText{}),
-	reflect.TypeOf(FrameComment{}),
-	reflect.TypeOf(FrameURL{}),
-	reflect.TypeOf(FrameURLCustom{}),
-	reflect.TypeOf(FrameAttachedPicture{}),
-	reflect.TypeOf(FrameUniqueFileID{}),
-	reflect.TypeOf(FrameTermsOfUse{}),
-	reflect.TypeOf(FrameLyricsUnsync{}),
-	reflect.TypeOf(FrameLyricsSync{}),
-	reflect.TypeOf(FrameSyncTempoCodes{}),
-	reflect.TypeOf(FrameGroupID{}),
-	reflect.TypeOf(FramePrivate{}),
-	reflect.TypeOf(FramePlayCount{}),
-	reflect.TypeOf(FramePopularimeter{}),
+func (m *frameTypeMap) LookupReflectType(id string) reflect.Type {
+	t, ok := m.FrameIDToReflectType[id]
+	if !ok {
+		t = reflect.TypeOf(FrameUnknown{})
+	}
+	return t
+}
+
+func (m *frameTypeMap) LookupFrameType(id string) FrameType {
+	t, ok := m.FrameIDToFrameType[id]
+	if !ok {
+		t = FrameTypeUnknown
+	}
+	return t
 }
