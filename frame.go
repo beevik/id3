@@ -2,26 +2,9 @@ package id3
 
 import "reflect"
 
-// A FrameHolder holds the header and payload of an ID3 frame.
-// DEPRECATED.
-type FrameHolder struct {
-	header FrameHeader
-	Frame  Frame
-}
-
-// Size returns the encoded size of the frame, not including the header.
-func (f *FrameHolder) Size() int {
-	return f.header.Size
-}
-
-// ID returns the 4-character ID string currently assigned to the frame.
-func (f *FrameHolder) ID() string {
-	return f.header.ID
-}
-
 // A FrameHeader holds the data described by a frame header.
 type FrameHeader struct {
-	ID            string      // Frame ID string
+	FrameID       string      // Frame ID string
 	Size          int         // Frame size not including 10-byte header
 	Flags         FrameFlags  // Flags
 	GroupID       GroupSymbol // Optional group identifier
@@ -205,25 +188,49 @@ type GroupSymbol byte
 // A Frame is an interface capable of representing the payload of any of the
 // possible frame types (e.g., FrameText, FrameURL, etc.).
 //
-// Use a type assertion to access the frame's contents. For example:
+// Use a type assertion to access the frame's contents. For example, given a
+// Frame f:
 //
-//	for _, h := range tag.FrameHolders {
-//		switch f := h.Frame.(type) {
-// 			case *id3.FrameText:
-// 				fmt.Printf("%v\n", f.Text)
-//			case *id3.FrameURL:
-//				fmt.Printf("%s\n", f.URL)
-//		}
+// 	if ft, ok := f.(*id3.FrameText); ok {
+//		fmt.Printf("%s\n", ft.Text)
+//	}
+//
+// OR:
+//
+//	switch ff := f.(type) {
+// 		case *id3.FrameText:
+// 			fmt.Printf("%v\n", ff.Text)
+//		case *id3.FrameURL:
+//			fmt.Printf("%s\n", ff.URL)
 //	}
 type Frame interface {
+}
+
+// HeaderOf returns the header data associated with the frame.
+func HeaderOf(f Frame) FrameHeader {
+	var hdr FrameHeader
+	ft := reflect.ValueOf(f).Elem()
+	hv := reflect.ValueOf(&hdr).Elem()
+	hv.Set(ft.Field(0))
+	return hdr
 }
 
 // FrameUnknown contains the payload of any frame whose ID is
 // unknown to this package.
 type FrameUnknown struct {
+	Header  FrameHeader
 	Type    FrameType
 	FrameID string
 	Data    []byte
+}
+
+// NewFrameUnknown creates a new frame of unknown type.
+func NewFrameUnknown(id string, data []byte) *FrameUnknown {
+	return &FrameUnknown{
+		Type:    FrameTypeUnknown,
+		FrameID: id,
+		Data:    data,
+	}
 }
 
 // FrameText may contain the payload of any type of text frame
@@ -231,6 +238,7 @@ type FrameUnknown struct {
 // may contain one or more text strings.  In all other versions, only one
 // text string may appear.
 type FrameText struct {
+	Header   FrameHeader
 	Type     FrameType
 	Encoding Encoding
 	Text     []string
@@ -247,6 +255,7 @@ func NewFrameText(typ FrameType, text string) *FrameText {
 
 // FrameTextCustom contains a custom text payload.
 type FrameTextCustom struct {
+	Header      FrameHeader
 	Type        FrameType
 	Encoding    Encoding
 	Description string
@@ -265,6 +274,7 @@ func NewFrameTextCustom(description, text string) *FrameTextCustom {
 
 // FrameComment contains a full-text comment field.
 type FrameComment struct {
+	Header      FrameHeader
 	Type        FrameType
 	Encoding    Encoding
 	Language    string `id3:"lang"`
@@ -286,8 +296,9 @@ func NewFrameComment(language, description, text string) *FrameComment {
 // FrameURL may contain the payload of any type of URL frame except
 // for the user-defined WXXX URL frame.
 type FrameURL struct {
-	Type FrameType
-	URL  string `id3:"iso88519"`
+	Header FrameHeader
+	Type   FrameType
+	URL    string `id3:"iso88519"`
 }
 
 // NewFrameURL creates a URL frame of the requested type.
@@ -300,6 +311,7 @@ func NewFrameURL(typ FrameType, url string) *FrameURL {
 
 // FrameURLCustom contains a custom URL payload.
 type FrameURLCustom struct {
+	Header      FrameHeader
 	Type        FrameType
 	Encoding    Encoding
 	Description string
@@ -318,6 +330,7 @@ func NewFrameURLCustom(description, url string) *FrameURLCustom {
 
 // FrameAttachedPicture contains the payload of an image frame.
 type FrameAttachedPicture struct {
+	Header      FrameHeader
 	Type        FrameType
 	Encoding    Encoding
 	MimeType    string `id3:"iso88519"`
@@ -340,6 +353,7 @@ func NewFrameAttachedPicture(mimeType, description string, typ PictureType, data
 
 // FrameUniqueFileID contains a unique file identifier for the MP3.
 type FrameUniqueFileID struct {
+	Header     FrameHeader
 	Type       FrameType
 	Owner      string `id3:"iso88519"`
 	Identifier string `id3:"iso88519"`
@@ -356,6 +370,7 @@ func NewFrameUniqueFileID(owner, id string) *FrameUniqueFileID {
 
 // FrameTermsOfUse contains the terms of use description for the MP3.
 type FrameTermsOfUse struct {
+	Header   FrameHeader
 	Type     FrameType
 	Encoding Encoding
 	Language string `id3:"lang"`
@@ -375,6 +390,7 @@ func NewFrameTermsOfUse(language, text string) *FrameTermsOfUse {
 // FrameLyricsUnsync contains unsynchronized lyrics and text transcription
 // data.
 type FrameLyricsUnsync struct {
+	Header     FrameHeader
 	Type       FrameType
 	Encoding   Encoding
 	Language   string `id3:"lang"`
@@ -402,6 +418,7 @@ type LyricsSync struct {
 
 // FrameLyricsSync contains synchronized lyrics or text information.
 type FrameLyricsSync struct {
+	Header      FrameHeader
 	Type        FrameType
 	Encoding    Encoding
 	Language    string `id3:"lang"`
@@ -451,6 +468,7 @@ type TempoSync struct {
 
 // FrameSyncTempoCodes contains synchronized tempo codes.
 type FrameSyncTempoCodes struct {
+	Header          FrameHeader
 	Type            FrameType
 	TimeStampFormat TimeStampFormat
 	Sync            []TempoSync
@@ -489,6 +507,7 @@ func (f *FrameSyncTempoCodes) AddSync(sync TempoSync) {
 // identifier, there will be a corresponding GRID frame with data
 // describing the group.
 type FrameGroupID struct {
+	Header  FrameHeader
 	Type    FrameType
 	Owner   string `id3:"iso88519"`
 	GroupID GroupSymbol
@@ -508,9 +527,10 @@ func NewFrameGroupID(owner string, groupID GroupSymbol, data []byte) *FrameGroup
 // FramePrivate contains private information specific to a software
 // producer.
 type FramePrivate struct {
-	Type  FrameType
-	Owner string `id3:"iso88519"`
-	Data  []byte
+	Header FrameHeader
+	Type   FrameType
+	Owner  string `id3:"iso88519"`
+	Data   []byte
 }
 
 // NewFramePrivate creates a new private information frame.
@@ -524,8 +544,9 @@ func NewFramePrivate(owner string, data []byte) *FramePrivate {
 
 // FramePlayCount tracks the number of times the MP3 file has been played.
 type FramePlayCount struct {
-	Type  FrameType
-	Count uint64 `id3:"counter"`
+	Header FrameHeader
+	Type   FrameType
+	Count  uint64 `id3:"counter"`
 }
 
 // NewFramePlayCount creates a new play count frame.
@@ -538,6 +559,7 @@ func NewFramePlayCount(count uint64) *FramePlayCount {
 
 // FramePopularimeter tracks the "popularimeter" value for an MP3 file.
 type FramePopularimeter struct {
+	Header FrameHeader
 	Type   FrameType
 	Email  string `id3:"iso88519"`
 	Rating uint8
@@ -554,8 +576,8 @@ func NewFramePopularimeter(email string, rating uint8, count uint64) *FramePopul
 	}
 }
 
-// frameTypes holds all possible frame payload types supported by ID3.
-var frameData = []struct {
+// frameList holds all possible frame payload types supported by ID3.
+var frameList = []struct {
 	frameType   FrameType
 	reflectType reflect.Type
 }{
@@ -634,23 +656,24 @@ var frameData = []struct {
 
 type frameTypeMap struct {
 	FrameTypeToFrameID   map[FrameType]string
-	FrameIDToReflectType map[string]reflect.Type
 	FrameIDToFrameType   map[string]FrameType
+	FrameIDToReflectType map[string]reflect.Type
 }
 
 func newFrameTypeMap(frameTypeToFrameID map[FrameType]string) *frameTypeMap {
-	m := &frameTypeMap{}
-	m.FrameTypeToFrameID = frameTypeToFrameID
-
-	m.FrameIDToReflectType = make(map[string]reflect.Type)
-	for _, d := range frameData {
-		id := m.FrameTypeToFrameID[d.frameType]
-		m.FrameIDToReflectType[id] = d.reflectType
+	m := &frameTypeMap{
+		FrameTypeToFrameID:   frameTypeToFrameID,
+		FrameIDToFrameType:   make(map[string]FrameType),
+		FrameIDToReflectType: make(map[string]reflect.Type),
 	}
 
-	m.FrameIDToFrameType = make(map[string]FrameType)
 	for k, v := range m.FrameTypeToFrameID {
 		m.FrameIDToFrameType[v] = k
+	}
+
+	for _, f := range frameList {
+		id := m.FrameTypeToFrameID[f.frameType]
+		m.FrameIDToReflectType[id] = f.reflectType
 	}
 
 	return m

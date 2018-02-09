@@ -10,14 +10,15 @@ import (
 )
 
 func main() {
+	lyr := id3.NewFrameLyricsSync("eng", "lyrics", id3.TimeStampMilliseconds, id3.LyricContentTypeTranscription)
+	lyr.AddSync(id3.LyricsSync{Text: "c", TimeStamp: 3})
+	lyr.AddSync(id3.LyricsSync{Text: "a", TimeStamp: 1})
+	lyr.AddSync(id3.LyricsSync{Text: "b", TimeStamp: 2})
 
-	// lyr := id3.NewFrameLyricsSync("eng", "lyrics",
-	// 	id3.TimeStampMilliseconds, id3.LyricContentTypeTranscription)
-	// lyr.AddSync(id3.LyricsSync{Text: "c", TimeStamp: 3})
-	// lyr.AddSync(id3.LyricsSync{Text: "a", TimeStamp: 1})
-	// lyr.AddSync(id3.LyricsSync{Text: "b", TimeStamp: 2})
-	// ff := id3.NewFrameHolder(lyr)
-	// _ = ff
+	var f id3.Frame = lyr
+	if tf, ok := f.(*id3.FrameLyricsSync); ok {
+		fmt.Printf("%v\n", tf.Sync)
+	}
 
 	flag.Parse()
 	args := flag.Args()
@@ -53,13 +54,15 @@ func main() {
 			fmt.Printf("Pad: %d bytes\n", tag.Padding)
 		}
 
-		for _, h := range tag.FrameHolders {
-			fmt.Printf("[size=0x%04x] %s", h.Size()+10, h.ID())
-			switch f := h.Frame.(type) {
+		for _, h := range tag.Frames {
+			hdr := id3.HeaderOf(h)
+			fmt.Printf("[size=0x%04x] %s", hdr.Size+10, hdr.FrameID)
+
+			switch f := h.(type) {
 			case *id3.FrameUnknown:
 				fmt.Printf(": (%d bytes)", len(f.Data))
 			case *id3.FrameAttachedPicture:
-				fmt.Printf(": #%d %s[%s] (%d bytes)", f.Type, f.Description, f.MimeType, len(f.Data))
+				fmt.Printf(": #%d %s[%s] (%d bytes)", f.PictureType, f.Description, f.MimeType, len(f.Data))
 			case *id3.FrameText:
 				fmt.Printf(": %s", strings.Join(f.Text, " - "))
 			case *id3.FrameTextCustom:

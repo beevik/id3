@@ -8,13 +8,13 @@ import (
 
 // A Tag represents an entire ID3 tag, including zero or more frames.
 type Tag struct {
-	Version      Version        // ID3 codec version (2.2, 2.3, or 2.4)
-	Flags        TagFlags       // Flags
-	Size         int            // Size not including the header
-	Padding      int            // Number of bytes of padding
-	CRC          uint32         // Optional CRC code
-	Restrictions uint16         // ID3 restrictions (v2.4 only)
-	FrameHolders []*FrameHolder // All ID3 frames included in the tag
+	Version      Version  // ID3 codec version (2.2, 2.3, or 2.4)
+	Flags        TagFlags // Flags
+	Size         int      // Size not including the header
+	Padding      int      // Number of bytes of padding
+	CRC          uint32   // Optional CRC code
+	Restrictions uint16   // ID3 restrictions (v2.4 only)
+	Frames       []Frame  // All ID3 frames included in the tag
 }
 
 // TagFlags describe flags that may appear within an ID3 tag. Not all
@@ -115,9 +115,9 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 
 	// Decode the tag's frames until the tag is exhausted.
 	for rb.Len() > 0 {
-		fh := &FrameHolder{}
+		var f Frame
 
-		_, err = codec.DecodeFrame(t, fh, rb)
+		_, err = codec.DecodeFrame(t, &f, rb)
 
 		if err == errPaddingEncountered {
 			t.Padding = rb.Len()
@@ -133,7 +133,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 			return n, err
 		}
 
-		t.FrameHolders = append(t.FrameHolders, fh)
+		t.Frames = append(t.Frames, f)
 	}
 
 	// If there's a footer, validate it.
@@ -168,8 +168,8 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
 
 	// Encode the tag's frames into the temporary buffer.
-	for _, f := range t.FrameHolders {
-		_, err := codec.EncodeFrame(t, f, buf)
+	for _, f := range t.Frames {
+		_, err := codec.EncodeFrame(t, &f, buf)
 		if err != nil {
 			return 0, err
 		}

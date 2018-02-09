@@ -126,18 +126,6 @@ type state struct {
 	encoding Encoding
 }
 
-// NewFrameHolder creates a new frame holder, which contains the header
-// and payload of an ID3 frame.
-func (c *codec24) NewFrameHolder(frame Frame) *FrameHolder {
-	t := reflect.ValueOf(frame).Elem()
-	ft := FrameType(t.Field(0).Uint())
-	id := c.frameTypes.LookupFrameID(ft)
-	return &FrameHolder{
-		header: FrameHeader{ID: id},
-		Frame:  frame,
-	}
-}
-
 func (c *codec24) HeaderFlags() flagMap {
 	return c.headerFlags
 }
@@ -203,18 +191,20 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 	return s.n, s.err
 }
 
-func (c *codec24) DecodeFrame(t *Tag, f *FrameHolder, r io.Reader) (int, error) {
+func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	// Read the first four bytes of the frame header to see if it's padding.
 	var s scanner
 	if s.Read(r, 4); s.err != nil {
 		return s.n, s.err
 	}
 
+	var header FrameHeader
+
 	hdr := s.ConsumeAll()
 	if hdr[0] == 0 && hdr[1] == 0 && hdr[2] == 0 && hdr[3] == 0 {
 		return s.n, errPaddingEncountered
 	}
-	f.header.ID = string(hdr[0:4])
+	header.FrameID = string(hdr[0:4])
 
 	// Read the rest of the header.
 	if s.Read(r, 6); s.err != nil {
@@ -230,25 +220,25 @@ func (c *codec24) DecodeFrame(t *Tag, f *FrameHolder, r io.Reader) (int, error) 
 	if size < 1 {
 		return s.n, ErrInvalidFrameHeader
 	}
-	f.header.Size = int(size)
+	header.Size = int(size)
 
 	// Process the flags.
 	flags := uint32(hdr[8])<<8 | uint32(hdr[9])
-	f.header.Flags = FrameFlags(c.frameFlags.Decode(flags))
+	header.Flags = FrameFlags(c.frameFlags.Decode(flags))
 
 	// Read the rest of the frame into a buffer.
-	if s.Read(r, f.header.Size); s.err != nil {
+	if s.Read(r, header.Size); s.err != nil {
 		return s.n, s.err
 	}
 
 	// Strip unsync codes if the frame is unsynchronized but the tag isn't.
-	if (f.header.Flags&FrameFlagUnsynchronized) != 0 && (t.Flags&TagFlagUnsync) == 0 {
+	if (header.Flags&FrameFlagUnsynchronized) != 0 && (t.Flags&TagFlagUnsync) == 0 {
 		s.Replace(removeUnsyncCodes(s.buf))
 	}
 
 	// Scan extra header data indicated by flags.
-	if f.header.Flags != 0 {
-		c.scanExtraHeaderData(&s, &f.header)
+	if header.Flags != 0 {
+		c.scanExtraHeaderData(&s, &header)
 		if s.err != nil {
 			return s.n, s.err
 		}
@@ -256,12 +246,12 @@ func (c *codec24) DecodeFrame(t *Tag, f *FrameHolder, r io.Reader) (int, error) 
 
 	// Initialize the frame payload scan state.
 	state := state{
-		frameID:  f.header.ID,
+		frameID:  header.FrameID,
 		encoding: EncodingISO88591,
 	}
 
 	// Select a frame payload type and scan its structure.
-	typ := c.frameTypes.LookupReflectType(f.header.ID)
+	typ := c.frameTypes.LookupReflectType(header.FrameID)
 	p := property{
 		typ:   typ,
 		tags:  emptyTagList,
@@ -271,7 +261,12 @@ func (c *codec24) DecodeFrame(t *Tag, f *FrameHolder, r io.Reader) (int, error) 
 
 	// Retrieve the interface.
 	if s.err == nil {
-		f.Frame = p.value.Interface().(Frame)
+		*f = p.value.Interface().(Frame)
+
+		// Copy the header into the frame's first field, which must be the
+		// header.
+		ht := reflect.ValueOf(*f).Elem()
+		ht.Field(0).Set(reflect.ValueOf(header))
 	}
 
 	return s.n, s.err
@@ -312,6 +307,10 @@ func (c *codec24) scanExtraHeaderData(s *scanner, h *FrameHeader) {
 }
 
 func (c *codec24) scanStruct(s *scanner, p property, state *state) {
+	if p.typ.Name() == "FrameHeader" {
+		return
+	}
+
 	for i, n := 0, p.typ.NumField(); i < n; i++ {
 		field := p.typ.Field(i)
 
@@ -528,6 +527,6 @@ func (c *codec24) scanUint64(s *scanner, p property, state *state) {
 	p.value.SetUint(value)
 }
 
-func (c *codec24) EncodeFrame(t *Tag, f *FrameHolder, w io.Writer) (int, error) {
+func (c *codec24) EncodeFrame(t *Tag, f *Frame, w io.Writer) (int, error) {
 	return 0, ErrUnimplemented
 }
