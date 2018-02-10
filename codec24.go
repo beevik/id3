@@ -121,7 +121,7 @@ type property struct {
 // The state structure keeps track of persistent state required while
 // decoding a single frame.
 type state struct {
-	frameID  string
+	frameID  FrameID
 	encoding Encoding
 }
 
@@ -203,7 +203,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	if hdr[0] == 0 && hdr[1] == 0 && hdr[2] == 0 && hdr[3] == 0 {
 		return s.n, errPaddingEncountered
 	}
-	header.FrameID = string(hdr[0:4])
+	header.FrameID = FrameID(hdr[0:4])
 
 	// Read the rest of the header.
 	if s.Read(r, 6); s.err != nil {
@@ -360,7 +360,7 @@ func (c *codec24) scanString(s *scanner, p property, state *state) {
 	}
 
 	if p.typ.Name() == "FrameID" {
-		p.value.SetString(state.frameID)
+		p.value.SetString(string(state.frameID))
 		return
 	}
 

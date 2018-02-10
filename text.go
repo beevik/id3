@@ -5,11 +5,12 @@ import (
 	"unicode/utf8"
 )
 
-// Encoding represents the type of encoding used on a text string with an
-// ID3 frame.
+// An Encoding value describes the type of text encoding used on a frame's
+// strings.  Options include UTF8, UTF16, UTF16 with a BOM, and ISO 8559-1
+// (Western).
 type Encoding uint8
 
-// Possible values used to indicate the type of text encoding.
+// Possible values used to indicate the text encoding scheme.
 const (
 	EncodingISO88591 Encoding = 0
 	EncodingUTF16BOM          = 1

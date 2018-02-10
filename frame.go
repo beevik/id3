@@ -4,7 +4,7 @@ import "reflect"
 
 // A FrameHeader holds the data described by a frame header.
 type FrameHeader struct {
-	FrameID       string      // Frame ID string
+	FrameID       FrameID     // Frame ID string
 	Size          int         // Frame size not including 10-byte header
 	Flags         FrameFlags  // Flags
 	GroupID       GroupSymbol // Optional group identifier
@@ -12,17 +12,22 @@ type FrameHeader struct {
 	DataLength    uint32      // Optional data length (if FrameFlagHasDataLength is set)
 }
 
-// A WesternString is always encoded using ISO 8559-1.
+// A FrameID is a 3- or 4-character string describing the type of frame.
+type FrameID string
+
+// A WesternString is a string that is always saved into the tag using
+// ISO 8559-1 encoding.
 type WesternString string
 
 // A LanguageString is a 3-character string identifying a language according
 // to ISO-639-2.
 type LanguageString string
 
-// A Counter describes an integer counting value.
+// A Counter is an integer used to count. It is used with play-count
+// and popularimeter frames.
 type Counter uint64
 
-// A Tempo is an integer counting the number of beats per minute.
+// A Tempo is an integer counting the number of beats per minute (BPM).
 type Tempo uint16
 
 // FrameFlags describe flags that may appear within a FrameHeader. Not all
@@ -130,10 +135,10 @@ const (
 	FrameTypeTextTitleSortOrder      // TSOT (v2.4 only)
 
 	// Text frames: v2.3-only frames (ID3v2.3 spec)
-	FrameTypeTextDate           // TDAT (subsumed by TDRC in v2.4)
-	FrameTypeTextTime           // TIME (subsumed by TDRC in v2.4)
-	FrameTypeTextRecordingDates // TRDA (subsumed by TDRC in v2.4)
-	FrameTypeTextSize           // TSIZ
+	FrameTypeTextDate           // TDAT (v2.3 only, subsumed by TDRC in v2.4)
+	FrameTypeTextTime           // TIME (v2.3 only, subsumed by TDRC in v2.4)
+	FrameTypeTextRecordingDates // TRDA (v2.3 only, subsumed by TDRC in v2.4)
+	FrameTypeTextSize           // TSIZ (v2.3 only)
 
 	// Text frames: custom text
 	FrameTypeTextCustom // TXXX
@@ -233,7 +238,7 @@ func HeaderOf(f Frame) FrameHeader {
 type FrameUnknown struct {
 	Header  FrameHeader
 	Type    FrameType
-	FrameID string
+	FrameID FrameID
 	Data    []byte
 }
 
@@ -241,7 +246,7 @@ type FrameUnknown struct {
 func NewFrameUnknown(id string, data []byte) *FrameUnknown {
 	return &FrameUnknown{
 		Type:    FrameTypeUnknown,
-		FrameID: id,
+		FrameID: FrameID(id),
 		Data:    data,
 	}
 }
@@ -692,24 +697,24 @@ func newFrameTypeMap(frameTypeToFrameID map[FrameType]string) *frameTypeMap {
 	return m
 }
 
-func (m *frameTypeMap) LookupFrameID(t FrameType) string {
+func (m *frameTypeMap) LookupFrameID(t FrameType) FrameID {
 	id, ok := m.FrameTypeToFrameID[t]
 	if !ok {
 		id = m.FrameTypeToFrameID[FrameTypeUnknown]
 	}
-	return id
+	return FrameID(id)
 }
 
-func (m *frameTypeMap) LookupReflectType(id string) reflect.Type {
-	t, ok := m.FrameIDToReflectType[id]
+func (m *frameTypeMap) LookupReflectType(id FrameID) reflect.Type {
+	t, ok := m.FrameIDToReflectType[string(id)]
 	if !ok {
 		t = reflect.TypeOf(FrameUnknown{})
 	}
 	return t
 }
 
-func (m *frameTypeMap) LookupFrameType(id string) FrameType {
-	t, ok := m.FrameIDToFrameType[id]
+func (m *frameTypeMap) LookupFrameType(id FrameID) FrameType {
+	t, ok := m.FrameIDToFrameType[string(id)]
 	if !ok {
 		t = FrameTypeUnknown
 	}
