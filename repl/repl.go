@@ -10,6 +10,13 @@ import (
 )
 
 func main() {
+
+	sp := id3.NewFrameAudioSeekPointIndex(0, 1000)
+	sp.AddIndex(0.1134)
+	sp.AddIndex(0.0034)
+	sp.AddIndex(0.928)
+	fmt.Printf("%v %v\n", sp.IndexPoints, sp.Indexes)
+
 	lyr := id3.NewFrameLyricsSync("eng", "lyrics", id3.TimeStampMilliseconds, id3.LyricContentTypeTranscription)
 	lyr.AddSync(id3.LyricsSync{Text: "c", TimeStamp: 3})
 	lyr.AddSync(id3.LyricsSync{Text: "a", TimeStamp: 1})

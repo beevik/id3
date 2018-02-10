@@ -15,6 +15,11 @@ type FrameHeader struct {
 // A FrameID is a 3- or 4-character string describing the type of frame.
 type FrameID string
 
+// A GroupSymbol is a value between 0x80 and 0xF0 that uniquely identifies
+// a grouped set of frames. The data associated with each GroupSymbol value
+// is described futher in group identifier frames.
+type GroupSymbol byte
+
 // A WesternString is a string that is always saved into the tag using
 // ISO 8559-1 encoding.
 type WesternString string
@@ -116,37 +121,34 @@ const (
 	FrameTypeTextCustom // TXXX
 
 	// URL frames
+	FrameTypeURLArtist       // WOAR
+	FrameTypeURLAudioFile    // WOAF
+	FrameTypeURLAudioSource  // WOAS
 	FrameTypeURLCommercial   // WCOM
 	FrameTypeURLCopyright    // WCOP
-	FrameTypeURLAudioFile    // WOAF
-	FrameTypeURLArtist       // WOAR
-	FrameTypeURLAudioSource  // WOAS
-	FrameTypeURLRadioStation // WORS
+	FrameTypeURLCustom       // WXXX
 	FrameTypeURLPayment      // WPAY
 	FrameTypeURLPublisher    // WPUB
-	FrameTypeURLCustom       // WXXX
+	FrameTypeURLRadioStation // WORS
 
 	// Other frames
-	FrameTypeComment         // COMM
-	FrameTypeAttachedPicture // APIC
-	FrameTypeUniqueFileID    // UFID
-	FrameTypeTermsOfUse      // USER
-	FrameTypeLyricsUnsync    // USLT
-	FrameTypeLyricsSync      // SYLT
-	FrameTypeSyncTempoCodes  // SYTC
-	FrameTypeGroupID         // GRID
-	FrameTypePrivate         // PRIV
-	FrameTypePlayCount       // PCNT
-	FrameTypePopularimeter   // POPM
+	FrameTypeAttachedPicture     // APIC
+	FrameTypeAudioEncryption     // AENC
+	FrameTypeAudioSeekPointIndex // ASPI
+	FrameTypeComment             // COMM
+	FrameTypeGroupID             // GRID
+	FrameTypeLyricsSync          // SYLT
+	FrameTypeLyricsUnsync        // USLT
+	FrameTypePlayCount           // PCNT
+	FrameTypePopularimeter       // POPM
+	FrameTypePrivate             // PRIV
+	FrameTypeSyncTempoCodes      // SYTC
+	FrameTypeTermsOfUse          // USER
+	FrameTypeUniqueFileID        // UFID
 
 	// Non-standard values
 	FrameTypeUnknown
 )
-
-// A GroupSymbol is a value between 0x80 and 0xF0 that uniquely identifies
-// a grouped set of frames. The data associated with each GroupSymbol value
-// is described futher in group identifier frames.
-type GroupSymbol byte
 
 // A Frame is an interface capable of representing the payload of any of the
 // possible frame types (e.g., FrameText, FrameURL, etc.).
@@ -228,6 +230,82 @@ func NewFrameAttachedPicture(mimeType, description string, typ PictureType, data
 		Description: description,
 		Data:        data,
 	}
+}
+
+// FrameAudioEncryption indicates if the audio stream is encrypted and, if
+// so, provides data used by an encryption algorithm to decode it.
+type FrameAudioEncryption struct {
+	Header        FrameHeader
+	Type          FrameType
+	Owner         WesternString
+	PreviewStart  uint16
+	PreviewLength uint16
+	Data          []byte
+}
+
+// NewFrameAudioEncryption creates a new audio encryption frame.
+func NewFrameAudioEncryption(owner string, previewStart, previewLength uint16, data []byte) *FrameAudioEncryption {
+	return &FrameAudioEncryption{
+		Type:          FrameTypeAudioEncryption,
+		Owner:         WesternString(owner),
+		PreviewStart:  previewStart,
+		PreviewLength: previewLength,
+		Data:          data,
+	}
+}
+
+// A Fraction represents a value between 0 and 1, indicating a distance
+// from the start of the indexed audio data to the index in question.
+type Fraction float32
+
+// The Bits type is used to store the number of bits per index (8 or 16).
+type Bits uint8
+
+// FrameAudioSeekPointIndex contains audio indexing data useful for locating
+// important positions within the encoded audio data.
+type FrameAudioSeekPointIndex struct {
+	Header            FrameHeader
+	Type              FrameType
+	IndexedDataStart  uint32
+	IndexedDataLength uint32
+	IndexPoints       uint16
+	BitsPerIndex      Bits
+	Indexes           []Fraction
+}
+
+// NewFrameAudioSeekPointIndex creates a new audio seek point index frame.
+func NewFrameAudioSeekPointIndex(indexedDataStart, indexedDataLength uint32) *FrameAudioSeekPointIndex {
+	return &FrameAudioSeekPointIndex{
+		Type:              FrameTypeAudioSeekPointIndex,
+		IndexedDataStart:  indexedDataStart,
+		IndexedDataLength: indexedDataLength,
+		IndexPoints:       0,
+		BitsPerIndex:      16,
+		Indexes:           []Fraction{},
+	}
+}
+
+// AddIndex inserts a new index into the audio seek point index frame. The
+// fraction is relative to the indexed data start and length values associated
+// with the frame and must be between 0 and 1.
+func (f *FrameAudioSeekPointIndex) AddIndex(fraction float32) {
+	var i int
+	for i = 0; i < len(f.Indexes); i++ {
+		if f.Indexes[i] > Fraction(fraction) {
+			break
+		}
+	}
+
+	switch {
+	case i == len(f.Indexes):
+		f.Indexes = append(f.Indexes, Fraction(fraction))
+	default:
+		f.Indexes = append(f.Indexes, 0)
+		copy(f.Indexes[i+1:], f.Indexes[i:])
+		f.Indexes[i] = Fraction(fraction)
+	}
+
+	f.IndexPoints++
 }
 
 // FrameComment contains a full-text comment field.
@@ -358,7 +436,7 @@ func NewFrameLyricsSync(language, descriptor string,
 // frame. It inserts the syllable in sorted order by time stamp.
 func (f *FrameLyricsSync) AddSync(sync LyricsSync) {
 	var i int
-	for i = range f.Sync {
+	for i = 0; i < len(f.Sync); i++ {
 		if f.Sync[i].TimeStamp > sync.TimeStamp {
 			break
 		}
@@ -452,7 +530,7 @@ func NewFrameSyncTempoCodes(format TimeStampFormat) *FrameSyncTempoCodes {
 // frame. It inserts the syllable in sorted order by time stamp.
 func (f *FrameSyncTempoCodes) AddSync(sync TempoSync) {
 	var i int
-	for i = range f.Sync {
+	for i = 0; i < len(f.Sync); i++ {
 		if f.Sync[i].TimeStamp > sync.TimeStamp {
 			break
 		}
@@ -605,6 +683,8 @@ var frameList = []struct {
 	reflectType reflect.Type
 }{
 	{FrameTypeAttachedPicture, reflect.TypeOf(FrameAttachedPicture{})},
+	{FrameTypeAudioEncryption, reflect.TypeOf(FrameAudioEncryption{})},
+	{FrameTypeAudioSeekPointIndex, reflect.TypeOf(FrameAudioSeekPointIndex{})},
 	{FrameTypeComment, reflect.TypeOf(FrameComment{})},
 	{FrameTypeGroupID, reflect.TypeOf(FrameGroupID{})},
 	{FrameTypeLyricsSync, reflect.TypeOf(FrameLyricsSync{})},

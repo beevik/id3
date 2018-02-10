@@ -124,7 +124,8 @@ type property struct {
 // decoding a single frame.
 type state struct {
 	frameID  FrameID
-	encoding Encoding
+	encoding Encoding // used by text frames
+	bits     uint8    // used by ASPI frame
 }
 
 func (c *codec24) HeaderFlags() flagMap {
@@ -337,6 +338,8 @@ func (c *codec24) scanStruct(s *scanner, p property, state *state) {
 			switch field.Type.Elem().Kind() {
 			case reflect.Uint8:
 				c.scanByteSlice(s, fp, state)
+			case reflect.Float32:
+				c.scanFloat32Slice(s, fp, state)
 			case reflect.String:
 				c.scanStringSlice(s, fp, state)
 			case reflect.Struct:
@@ -394,6 +397,41 @@ func (c *codec24) scanByteSlice(s *scanner, p property, state *state) {
 
 	b := s.ConsumeAll()
 	p.value.Set(reflect.ValueOf(b))
+}
+
+func (c *codec24) scanFloat32Slice(s *scanner, p property, state *state) {
+	if s.err != nil {
+		return
+	}
+
+	if p.typ.Elem().Name() != "Fraction" {
+		panic(errUnknownFieldType)
+	}
+
+	if state.bits != 8 && state.bits != 16 {
+		s.err = ErrInvalidFrame
+		return
+	}
+
+	var indexes []Fraction
+
+	ff := s.ConsumeAll()
+	switch state.bits {
+	case 8:
+		indexes = make([]Fraction, len(ff))
+		for _, b := range ff {
+			v := uint32(b)
+			indexes = append(indexes, Fraction(v)/Fraction(1<<8))
+		}
+	case 16:
+		indexes = make([]Fraction, len(ff)/2)
+		for i := 0; i < len(ff); i += 2 {
+			v := uint32(ff[i])<<8 | uint32(ff[i])
+			indexes = append(indexes, Fraction(v)/Fraction(1<<16))
+		}
+	}
+
+	p.value.Set(reflect.ValueOf(indexes))
 }
 
 func (c *codec24) scanStringSlice(s *scanner, p property, state *state) {
@@ -459,8 +497,11 @@ func (c *codec24) scanUint8(s *scanner, p property, state *state) {
 		return
 	}
 
-	if p.typ.Name() == "Encoding" {
+	switch p.typ.Name() {
+	case "Encoding":
 		state.encoding = Encoding(value)
+	case "Bits":
+		state.bits = value
 	}
 
 	p.value.SetUint(uint64(value))
