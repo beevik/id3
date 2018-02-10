@@ -12,6 +12,19 @@ type FrameHeader struct {
 	DataLength    uint32      // Optional data length (if FrameFlagHasDataLength is set)
 }
 
+// A WesternString is always encoded using ISO 8559-1.
+type WesternString string
+
+// A LanguageString is a 3-character string identifying a language according
+// to ISO-639-2.
+type LanguageString string
+
+// A Counter describes an integer counting value.
+type Counter uint64
+
+// A Tempo is an integer counting the number of beats per minute.
+type Tempo uint16
+
 // FrameFlags describe flags that may appear within a FrameHeader. Not all
 // flags are supported by all versions of the ID3 codec.
 type FrameFlags uint32
@@ -277,7 +290,7 @@ type FrameComment struct {
 	Header      FrameHeader
 	Type        FrameType
 	Encoding    Encoding
-	Language    string `id3:"lang"`
+	Language    LanguageString
 	Description string
 	Text        string
 }
@@ -287,7 +300,7 @@ func NewFrameComment(language, description, text string) *FrameComment {
 	return &FrameComment{
 		Type:        FrameTypeComment,
 		Encoding:    EncodingUTF8,
-		Language:    language,
+		Language:    LanguageString(language),
 		Description: description,
 		Text:        text,
 	}
@@ -298,14 +311,14 @@ func NewFrameComment(language, description, text string) *FrameComment {
 type FrameURL struct {
 	Header FrameHeader
 	Type   FrameType
-	URL    string `id3:"iso88519"`
+	URL    WesternString
 }
 
 // NewFrameURL creates a URL frame of the requested type.
 func NewFrameURL(typ FrameType, url string) *FrameURL {
 	return &FrameURL{
 		Type: typ,
-		URL:  url,
+		URL:  WesternString(url),
 	}
 }
 
@@ -315,7 +328,7 @@ type FrameURLCustom struct {
 	Type        FrameType
 	Encoding    Encoding
 	Description string
-	URL         string `id3:"iso88519"`
+	URL         WesternString
 }
 
 // NewFrameURLCustom creates a custom URL frame.
@@ -324,7 +337,7 @@ func NewFrameURLCustom(description, url string) *FrameURLCustom {
 		Type:        FrameTypeURLCustom,
 		Encoding:    EncodingUTF8,
 		Description: description,
-		URL:         url,
+		URL:         WesternString(url),
 	}
 }
 
@@ -333,7 +346,7 @@ type FrameAttachedPicture struct {
 	Header      FrameHeader
 	Type        FrameType
 	Encoding    Encoding
-	MimeType    string `id3:"iso88519"`
+	MimeType    WesternString
 	PictureType PictureType
 	Description string
 	Data        []byte
@@ -344,7 +357,7 @@ func NewFrameAttachedPicture(mimeType, description string, typ PictureType, data
 	return &FrameAttachedPicture{
 		Type:        FrameTypeAttachedPicture,
 		Encoding:    EncodingUTF8,
-		MimeType:    mimeType,
+		MimeType:    WesternString(mimeType),
 		PictureType: typ,
 		Description: description,
 		Data:        data,
@@ -355,16 +368,16 @@ func NewFrameAttachedPicture(mimeType, description string, typ PictureType, data
 type FrameUniqueFileID struct {
 	Header     FrameHeader
 	Type       FrameType
-	Owner      string `id3:"iso88519"`
-	Identifier string `id3:"iso88519"`
+	Owner      WesternString
+	Identifier WesternString
 }
 
 // NewFrameUniqueFileID creates a new Unique FileID frame.
 func NewFrameUniqueFileID(owner, id string) *FrameUniqueFileID {
 	return &FrameUniqueFileID{
 		Type:       FrameTypeUniqueFileID,
-		Owner:      owner,
-		Identifier: id,
+		Owner:      WesternString(owner),
+		Identifier: WesternString(id),
 	}
 }
 
@@ -373,7 +386,7 @@ type FrameTermsOfUse struct {
 	Header   FrameHeader
 	Type     FrameType
 	Encoding Encoding
-	Language string `id3:"lang"`
+	Language LanguageString
 	Text     string
 }
 
@@ -382,7 +395,7 @@ func NewFrameTermsOfUse(language, text string) *FrameTermsOfUse {
 	return &FrameTermsOfUse{
 		Type:     FrameTypeTermsOfUse,
 		Encoding: EncodingUTF8,
-		Language: language,
+		Language: LanguageString(language),
 		Text:     text,
 	}
 }
@@ -393,7 +406,7 @@ type FrameLyricsUnsync struct {
 	Header     FrameHeader
 	Type       FrameType
 	Encoding   Encoding
-	Language   string `id3:"lang"`
+	Language   LanguageString
 	Descriptor string
 	Text       string
 }
@@ -403,7 +416,7 @@ func NewFrameLyricsUnsync(language, descriptor, lyrics string) *FrameLyricsUnsyn
 	return &FrameLyricsUnsync{
 		Type:       FrameTypeLyricsUnsync,
 		Encoding:   EncodingUTF8,
-		Language:   language,
+		Language:   LanguageString(language),
 		Descriptor: descriptor,
 		Text:       lyrics,
 	}
@@ -421,7 +434,7 @@ type FrameLyricsSync struct {
 	Header      FrameHeader
 	Type        FrameType
 	Encoding    Encoding
-	Language    string `id3:"lang"`
+	Language    LanguageString
 	Format      TimeStampFormat
 	ContentType LyricContentType
 	Descriptor  string
@@ -434,7 +447,7 @@ func NewFrameLyricsSync(language, descriptor string,
 	return &FrameLyricsSync{
 		Type:        FrameTypeLyricsSync,
 		Encoding:    EncodingUTF8,
-		Language:    language,
+		Language:    LanguageString(language),
 		Format:      format,
 		ContentType: typ,
 		Sync:        []LyricsSync{},
@@ -462,7 +475,7 @@ func (f *FrameLyricsSync) AddSync(sync LyricsSync) {
 
 // TempoSync describes a tempo change.
 type TempoSync struct {
-	BPM       uint16 `id3:"tempo"`
+	BPM       Tempo
 	TimeStamp uint32
 }
 
@@ -509,7 +522,7 @@ func (f *FrameSyncTempoCodes) AddSync(sync TempoSync) {
 type FrameGroupID struct {
 	Header  FrameHeader
 	Type    FrameType
-	Owner   string `id3:"iso88519"`
+	Owner   WesternString
 	GroupID GroupSymbol
 	Data    []byte
 }
@@ -518,7 +531,7 @@ type FrameGroupID struct {
 func NewFrameGroupID(owner string, groupID GroupSymbol, data []byte) *FrameGroupID {
 	return &FrameGroupID{
 		Type:    FrameTypeGroupID,
-		Owner:   owner,
+		Owner:   WesternString(owner),
 		GroupID: groupID,
 		Data:    data,
 	}
@@ -529,7 +542,7 @@ func NewFrameGroupID(owner string, groupID GroupSymbol, data []byte) *FrameGroup
 type FramePrivate struct {
 	Header FrameHeader
 	Type   FrameType
-	Owner  string `id3:"iso88519"`
+	Owner  WesternString
 	Data   []byte
 }
 
@@ -537,7 +550,7 @@ type FramePrivate struct {
 func NewFramePrivate(owner string, data []byte) *FramePrivate {
 	return &FramePrivate{
 		Type:  FrameTypePrivate,
-		Owner: owner,
+		Owner: WesternString(owner),
 		Data:  data,
 	}
 }
@@ -546,14 +559,14 @@ func NewFramePrivate(owner string, data []byte) *FramePrivate {
 type FramePlayCount struct {
 	Header FrameHeader
 	Type   FrameType
-	Count  uint64 `id3:"counter"`
+	Count  Counter
 }
 
 // NewFramePlayCount creates a new play count frame.
 func NewFramePlayCount(count uint64) *FramePlayCount {
 	return &FramePlayCount{
 		Type:  FrameTypePlayCount,
-		Count: count,
+		Count: Counter(count),
 	}
 }
 
@@ -561,18 +574,18 @@ func NewFramePlayCount(count uint64) *FramePlayCount {
 type FramePopularimeter struct {
 	Header FrameHeader
 	Type   FrameType
-	Email  string `id3:"iso88519"`
+	Email  WesternString
 	Rating uint8
-	Count  uint64 `id3:"counter"`
+	Count  Counter
 }
 
 // NewFramePopularimeter creates a new "popularimeter" frame.
 func NewFramePopularimeter(email string, rating uint8, count uint64) *FramePopularimeter {
 	return &FramePopularimeter{
 		Type:   FrameTypePopularimeter,
-		Email:  email,
+		Email:  WesternString(email),
 		Rating: rating,
-		Count:  count,
+		Count:  Counter(count),
 	}
 }
 

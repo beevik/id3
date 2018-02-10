@@ -115,7 +115,6 @@ func newCodec24() *codec24 {
 // value. Usually the property is a struct field.
 type property struct {
 	typ   reflect.Type
-	tags  tagList
 	value reflect.Value
 }
 
@@ -254,7 +253,6 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	typ := c.frameTypes.LookupReflectType(header.FrameID)
 	p := property{
 		typ:   typ,
-		tags:  emptyTagList,
 		value: reflect.New(typ),
 	}
 	c.scanStruct(&s, p, &state)
@@ -316,7 +314,6 @@ func (c *codec24) scanStruct(s *scanner, p property, state *state) {
 
 		fp := property{
 			typ:   field.Type,
-			tags:  getTags(field.Tag, "id3"),
 			value: p.value.Elem().Field(i),
 		}
 
@@ -368,12 +365,12 @@ func (c *codec24) scanString(s *scanner, p property, state *state) {
 	}
 
 	enc := state.encoding
-	if p.tags.Lookup("iso88519") {
+	if p.typ.Name() == "WesternString" {
 		enc = EncodingISO88591
 	}
 
 	var str string
-	if p.tags.Lookup("lang") {
+	if p.typ.Name() == "LanguageString" {
 		str = s.ConsumeFixedLengthString(3, EncodingISO88591)
 	} else {
 		str = s.ConsumeNextString(enc)
@@ -416,7 +413,6 @@ func (c *codec24) scanStructSlice(s *scanner, p property, state *state) {
 		etyp := p.typ.Elem()
 		ep := property{
 			typ:   etyp,
-			tags:  emptyTagList,
 			value: reflect.New(etyp),
 		}
 
@@ -471,7 +467,7 @@ func (c *codec24) scanUint16(s *scanner, p property, state *state) {
 	}
 
 	var value uint16
-	if p.tags.Lookup("tempo") {
+	if p.typ.Name() == "Tempo" {
 		value = uint16(s.ConsumeByte())
 		if value == 0xff {
 			value += uint16(s.ConsumeByte())
@@ -508,7 +504,7 @@ func (c *codec24) scanUint64(s *scanner, p property, state *state) {
 	}
 
 	var buf []byte
-	if p.tags.Lookup("counter") {
+	if p.typ.Name() == "Counter" {
 		buf = s.ConsumeAll()
 	} else {
 		buf = s.ConsumeBytes(8)
