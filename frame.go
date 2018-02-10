@@ -87,7 +87,7 @@ const (
 	FrameTypeTextAlbumName                         // TALB
 	FrameTypeTextOriginalAlbum                     // TOAL
 	FrameTypeTextTrackNumber                       // TRCK
-	FrameTypeTextPartOfSet                         // TPOS
+	FrameTypeTextPartOfSet                         // TPOS (CD number)
 	FrameTypeTextSetSubtitle                       // TSST (v2.4 only)
 	FrameTypeTextISRC                              // TSRC
 
@@ -132,6 +132,7 @@ const (
 	FrameTypeTextTaggingTime         // TDTG (v2.4 only)
 	FrameTypeTextEncodingSoftware    // TSSE
 	FrameTypeTextAlbumSortOrder      // TSOA (v2.4 only)
+	FrameTypeTextPerformerSortOrder  // TSOP (v2.4 only)
 	FrameTypeTextTitleSortOrder      // TSOT (v2.4 only)
 
 	// Text frames: v2.3-only frames (ID3v2.3 spec)
@@ -644,12 +645,13 @@ var frameList = []struct {
 	{FrameTypeTextTaggingTime, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextEncodingSoftware, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextAlbumSortOrder, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextPerformerSortOrder, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextTitleSortOrder, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextDate, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextTime, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextRecordingDates, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextSize, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextCustom, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextCustom, reflect.TypeOf(FrameTextCustom{})},
 	{FrameTypeURLCommercial, reflect.TypeOf(FrameURL{})},
 	{FrameTypeURLCopyright, reflect.TypeOf(FrameURL{})},
 	{FrameTypeURLAudioFile, reflect.TypeOf(FrameURL{})},
@@ -658,7 +660,7 @@ var frameList = []struct {
 	{FrameTypeURLRadioStation, reflect.TypeOf(FrameURL{})},
 	{FrameTypeURLPayment, reflect.TypeOf(FrameURL{})},
 	{FrameTypeURLPublisher, reflect.TypeOf(FrameURL{})},
-	{FrameTypeURLCustom, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLCustom, reflect.TypeOf(FrameURLCustom{})},
 	{FrameTypeComment, reflect.TypeOf(FrameComment{})},
 	{FrameTypeAttachedPicture, reflect.TypeOf(FrameAttachedPicture{})},
 	{FrameTypeUniqueFileID, reflect.TypeOf(FrameUniqueFileID{})},
