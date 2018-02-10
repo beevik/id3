@@ -42,52 +42,63 @@ func newCodec24() *codec24 {
 			"LyricContentType": {0, 8},
 		},
 		frameTypes: newFrameTypeMap(map[FrameType]string{
-			FrameTypeTextGroupDescription:    "TIT1",
-			FrameTypeTextSongTitle:           "TIT2",
-			FrameTypeTextSongSubtitle:        "TIT3",
+			FrameTypeAttachedPicture:         "APIC",
+			FrameTypeComment:                 "COMM",
+			FrameTypeGroupID:                 "GRID",
+			FrameTypePlayCount:               "PCNT",
+			FrameTypePopularimeter:           "POPM",
+			FrameTypePrivate:                 "PRIV",
+			FrameTypeLyricsSync:              "SYLT",
+			FrameTypeSyncTempoCodes:          "SYTC",
 			FrameTypeTextAlbumName:           "TALB",
-			FrameTypeTextOriginalAlbum:       "TOAL",
-			FrameTypeTextTrackNumber:         "TRCK",
-			FrameTypeTextPartOfSet:           "TPOS",
-			FrameTypeTextSetSubtitle:         "TSST",
-			FrameTypeTextISRC:                "TSRC",
-			FrameTypeTextArtist:              "TPE1",
-			FrameTypeTextAlbumArtist:         "TPE2",
-			FrameTypeTextConductor:           "TPE3",
-			FrameTypeTextRemixer:             "TPE4",
-			FrameTypeTextOriginalPerformer:   "TOPE",
-			FrameTypeTextLyricist:            "TEXT",
-			FrameTypeTextOriginalLyricist:    "TOLY",
-			FrameTypeTextComposer:            "TCOM",
-			FrameTypeTextMusicians:           "TMCL",
-			FrameTypeTextInvolvedPeople:      "TIPL",
-			FrameTypeTextEncodedBy:           "TENC",
 			FrameTypeTextBPM:                 "TBPM",
-			FrameTypeTextLengthInMs:          "TLEN",
-			FrameTypeTextMusicalKey:          "TKEY",
-			FrameTypeTextLanguage:            "TLAN",
+			FrameTypeTextComposer:            "TCOM",
 			FrameTypeTextGenre:               "TCON",
-			FrameTypeTextFileType:            "TFLT",
-			FrameTypeTextMediaType:           "TMED",
-			FrameTypeTextMood:                "TMOO",
 			FrameTypeTextCopyright:           "TCOP",
-			FrameTypeTextProducedNotice:      "TPRO",
-			FrameTypeTextPublisher:           "TPUB",
-			FrameTypeTextOwner:               "TOWN",
-			FrameTypeTextRadioStation:        "TRSN",
-			FrameTypeTextRadioStationOwner:   "TRSO",
-			FrameTypeTextOriginalFileName:    "TOFN",
-			FrameTypeTextPlaylistDelay:       "TDLY",
 			FrameTypeTextEncodingTime:        "TDEN",
+			FrameTypeTextPlaylistDelay:       "TDLY",
 			FrameTypeTextOriginalReleaseTime: "TDOR",
 			FrameTypeTextRecordingTime:       "TDRC",
 			FrameTypeTextReleaseTime:         "TDRL",
 			FrameTypeTextTaggingTime:         "TDTG",
-			FrameTypeTextEncodingSoftware:    "TSSE",
+			FrameTypeTextEncodedBy:           "TENC",
+			FrameTypeTextLyricist:            "TEXT",
+			FrameTypeTextFileType:            "TFLT",
+			FrameTypeTextInvolvedPeople:      "TIPL",
+			FrameTypeTextGroupDescription:    "TIT1",
+			FrameTypeTextSongTitle:           "TIT2",
+			FrameTypeTextSongSubtitle:        "TIT3",
+			FrameTypeTextMusicalKey:          "TKEY",
+			FrameTypeTextLanguage:            "TLAN",
+			FrameTypeTextLengthInMs:          "TLEN",
+			FrameTypeTextMusicians:           "TMCL",
+			FrameTypeTextMediaType:           "TMED",
+			FrameTypeTextMood:                "TMOO",
+			FrameTypeTextOriginalAlbum:       "TOAL",
+			FrameTypeTextOriginalFileName:    "TOFN",
+			FrameTypeTextOriginalLyricist:    "TOLY",
+			FrameTypeTextOriginalPerformer:   "TOPE",
+			FrameTypeTextOwner:               "TOWN",
+			FrameTypeTextArtist:              "TPE1",
+			FrameTypeTextAlbumArtist:         "TPE2",
+			FrameTypeTextConductor:           "TPE3",
+			FrameTypeTextRemixer:             "TPE4",
+			FrameTypeTextPartOfSet:           "TPOS",
+			FrameTypeTextProducedNotice:      "TPRO",
+			FrameTypeTextPublisher:           "TPUB",
+			FrameTypeTextTrackNumber:         "TRCK",
+			FrameTypeTextRadioStation:        "TRSN",
+			FrameTypeTextRadioStationOwner:   "TRSO",
 			FrameTypeTextAlbumSortOrder:      "TSOA",
 			FrameTypeTextPerformerSortOrder:  "TSOP",
 			FrameTypeTextTitleSortOrder:      "TSOT",
+			FrameTypeTextISRC:                "TSRC",
+			FrameTypeTextEncodingSoftware:    "TSSE",
+			FrameTypeTextSetSubtitle:         "TSST",
 			FrameTypeTextCustom:              "TXXX",
+			FrameTypeUniqueFileID:            "UFID",
+			FrameTypeTermsOfUse:              "USER",
+			FrameTypeLyricsUnsync:            "USLT",
 			FrameTypeURLCommercial:           "WCOM",
 			FrameTypeURLCopyright:            "WCOP",
 			FrameTypeURLAudioFile:            "WOAF",
@@ -97,17 +108,6 @@ func newCodec24() *codec24 {
 			FrameTypeURLPayment:              "WPAY",
 			FrameTypeURLPublisher:            "WPUB",
 			FrameTypeURLCustom:               "WXXX",
-			FrameTypeComment:                 "COMM",
-			FrameTypeAttachedPicture:         "APIC",
-			FrameTypeUniqueFileID:            "UFID",
-			FrameTypeTermsOfUse:              "USER",
-			FrameTypeLyricsUnsync:            "USLT",
-			FrameTypeLyricsSync:              "SYLT",
-			FrameTypeSyncTempoCodes:          "SYTC",
-			FrameTypeGroupID:                 "GRID",
-			FrameTypePrivate:                 "PRIV",
-			FrameTypePlayCount:               "PCNT",
-			FrameTypePopularimeter:           "POPM",
 			FrameTypeUnknown:                 "ZZZZ",
 		}),
 	}
@@ -133,7 +133,7 @@ func (c *codec24) HeaderFlags() flagMap {
 
 func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 	// Read the first 6 bytes of the extended header so we can see how big
-	// the addition extended data is.
+	// the additional extended data is.
 	var s scanner
 	if s.Read(r, 6); s.err != nil {
 		return s.n, s.err
@@ -193,41 +193,43 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 }
 
 func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
-	// Read the first four bytes of the frame header to see if it's padding.
+	// Read the first four bytes of the frame header data to see if it's
+	// padding.
 	var s scanner
 	if s.Read(r, 4); s.err != nil {
 		return s.n, s.err
 	}
-
-	var header FrameHeader
-
-	hdr := s.ConsumeAll()
-	if hdr[0] == 0 && hdr[1] == 0 && hdr[2] == 0 && hdr[3] == 0 {
+	hd := s.ConsumeAll()
+	if hd[0] == 0 && hd[1] == 0 && hd[2] == 0 && hd[3] == 0 {
 		return s.n, errPaddingEncountered
 	}
-	header.FrameID = FrameID(hdr[0:4])
 
-	// Read the rest of the header.
+	// Read the remaining 6 bytes of the header data.
 	if s.Read(r, 6); s.err != nil {
 		return s.n, s.err
 	}
-	hdr = append(hdr, s.ConsumeAll()...)
+	hd = append(hd, s.ConsumeAll()...)
 
-	// Process the frame's size.
-	size, err := decodeSyncSafeUint32(hdr[4:8])
+	// Decode the frame's payload size.
+	size, err := decodeSyncSafeUint32(hd[4:8])
 	if err != nil {
 		return s.n, err
 	}
 	if size < 1 {
 		return s.n, ErrInvalidFrameHeader
 	}
-	header.Size = int(size)
 
-	// Process the flags.
-	flags := uint32(hdr[8])<<8 | uint32(hdr[9])
-	header.Flags = FrameFlags(c.frameFlags.Decode(flags))
+	// Decode the frame flags.
+	flags := c.frameFlags.Decode(uint32(hd[8])<<8 | uint32(hd[9]))
 
-	// Read the rest of the frame into a buffer.
+	// Create the frame header structure.
+	header := FrameHeader{
+		FrameID: FrameID(hd[0:4]),
+		Size:    int(size),
+		Flags:   FrameFlags(flags),
+	}
+
+	// Read the rest of the frame into the scanner.
 	if s.Read(r, header.Size); s.err != nil {
 		return s.n, s.err
 	}
@@ -237,7 +239,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 		s.Replace(removeUnsyncCodes(s.buf))
 	}
 
-	// Scan extra header data indicated by flags.
+	// Scan extra header data indicated by the flags.
 	if header.Flags != 0 {
 		c.scanExtraHeaderData(&s, &header)
 		if s.err != nil {
@@ -251,7 +253,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 		encoding: EncodingISO88591,
 	}
 
-	// Select a frame payload type and scan its structure.
+	// Use reflection to interpret the payload's contents.
 	typ := c.frameTypes.LookupReflectType(header.FrameID)
 	p := property{
 		typ:   typ,
@@ -259,12 +261,11 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	}
 	c.scanStruct(&s, p, &state)
 
-	// Retrieve the interface.
+	// Return the interpreted frame and header.
 	if s.err == nil {
 		*f = p.value.Interface().(Frame)
 
-		// Copy the header into the frame's first field, which must be the
-		// header.
+		// The frame's first field is always the header. Copy into it.
 		ht := reflect.ValueOf(*f).Elem()
 		ht.Field(0).Set(reflect.ValueOf(header))
 	}
@@ -372,11 +373,13 @@ func (c *codec24) scanString(s *scanner, p property, state *state) {
 	}
 
 	var str string
-	if p.typ.Name() == "LanguageString" {
+	switch p.typ.Name() {
+	case "LanguageString":
 		str = s.ConsumeFixedLengthString(3, EncodingISO88591)
-	} else {
+	default:
 		str = s.ConsumeNextString(enc)
 	}
+
 	if s.err != nil {
 		return
 	}
@@ -469,15 +472,17 @@ func (c *codec24) scanUint16(s *scanner, p property, state *state) {
 	}
 
 	var value uint16
-	if p.typ.Name() == "Tempo" {
+	switch p.typ.Name() {
+	case "Tempo":
 		value = uint16(s.ConsumeByte())
 		if value == 0xff {
 			value += uint16(s.ConsumeByte())
 		}
-	} else {
+	default:
 		b := s.ConsumeBytes(2)
 		value = uint16(b[0])<<8 | uint16(b[1])
 	}
+
 	if s.err != nil {
 		return
 	}
@@ -506,9 +511,10 @@ func (c *codec24) scanUint64(s *scanner, p property, state *state) {
 	}
 
 	var buf []byte
-	if p.typ.Name() == "Counter" {
+	switch p.typ.Name() {
+	case "Counter":
 		buf = s.ConsumeAll()
-	} else {
+	default:
 		buf = s.ConsumeBytes(8)
 	}
 

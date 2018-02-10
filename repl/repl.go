@@ -46,7 +46,7 @@ func main() {
 		}
 
 		fmt.Printf("Version: 2.%d\n", tag.Version)
-		fmt.Printf("Size: %d bytes\n", tag.Size)
+		fmt.Printf("Size: %d bytes\n", tag.Size+10)
 		if (tag.Flags & id3.TagFlagHasCRC) != 0 {
 			fmt.Printf("CRC: 0x%08x\n", tag.CRC)
 		}

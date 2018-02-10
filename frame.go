@@ -46,35 +46,6 @@ const (
 	FrameFlagHasDataLength                                  // Frame has a data length indicator
 )
 
-// PictureType describes the type of picture stored within an Attached
-// Picture frame.
-type PictureType uint8
-
-// All possible picture types.
-const (
-	PictureTypeOther PictureType = iota
-	PictureTypeIcon
-	PictureTypeIconOther
-	PictureTypeCoverFront
-	PictureTypeCoverBack
-	PictureTypeLeaflet
-	PictureTypeMedia
-	PictureTypeArtistLead
-	PictureTypeArtist
-	PictureTypeConductor
-	PictureTypeBand
-	PictureTypeComposer
-	PictureTypeLyricist
-	PictureTypeRecordingLocation
-	PictureTypeDuringRecording
-	PictureTypeDuringPerformance
-	PictureTypeVideoCapture
-	PictureTypeFish
-	PictureTypeIlllustration
-	PictureTypeBandLogotype
-	PictureTypePublisherLogotype
-)
-
 // A FrameType value identifies the type of an ID3 frame.
 type FrameType uint8
 
@@ -172,33 +143,6 @@ const (
 	FrameTypeUnknown
 )
 
-// TimeStampFormat indicates the type of time stamp used: milliseconds or
-// MPEG frame.
-type TimeStampFormat byte
-
-// All possible values of the TimeStampFormat type.
-const (
-	TimeStampFrames TimeStampFormat = 1 + iota
-	TimeStampMilliseconds
-)
-
-// LyricContentType indicates type type of lyrics stored in a synchronized
-// lyric frame.
-type LyricContentType byte
-
-// All possible values of the LyricContentType type.
-const (
-	LyricContentTypeOther LyricContentType = iota
-	LyricContentTypeLyrics
-	LyricContentTypeTranscription
-	LyricContentTypeMovement
-	LyricContentTypeEvents
-	LyricContentTypeChord
-	LyricContentTypeTrivia
-	LyricContentTypeWebURL
-	LyricContentTypeImageURL
-)
-
 // A GroupSymbol is a value between 0x80 and 0xF0 that uniquely identifies
 // a grouped set of frames. The data associated with each GroupSymbol value
 // is described futher in group identifier frames.
@@ -234,118 +178,34 @@ func HeaderOf(f Frame) FrameHeader {
 	return hdr
 }
 
-// FrameUnknown contains the payload of any frame whose ID is
-// unknown to this package.
-type FrameUnknown struct {
-	Header  FrameHeader
-	Type    FrameType
-	FrameID FrameID
-	Data    []byte
-}
+// PictureType describes the type of picture stored within an Attached
+// Picture frame.
+type PictureType uint8
 
-// NewFrameUnknown creates a new frame of unknown type.
-func NewFrameUnknown(id string, data []byte) *FrameUnknown {
-	return &FrameUnknown{
-		Type:    FrameTypeUnknown,
-		FrameID: FrameID(id),
-		Data:    data,
-	}
-}
-
-// FrameText may contain the payload of any type of text frame
-// except for a custom text frame.  In v2.4, each text frame
-// may contain one or more text strings.  In all other versions, only one
-// text string may appear.
-type FrameText struct {
-	Header   FrameHeader
-	Type     FrameType
-	Encoding Encoding
-	Text     []string
-}
-
-// NewFrameText creates a new text frame payload with a single text string.
-func NewFrameText(typ FrameType, text string) *FrameText {
-	return &FrameText{
-		Type:     typ,
-		Encoding: EncodingUTF8,
-		Text:     []string{text},
-	}
-}
-
-// FrameTextCustom contains a custom text payload.
-type FrameTextCustom struct {
-	Header      FrameHeader
-	Type        FrameType
-	Encoding    Encoding
-	Description string
-	Text        string
-}
-
-// NewFrameTextCustom creates a new custom text frame payload.
-func NewFrameTextCustom(description, text string) *FrameTextCustom {
-	return &FrameTextCustom{
-		Type:        FrameTypeTextCustom,
-		Encoding:    EncodingUTF8,
-		Description: description,
-		Text:        text,
-	}
-}
-
-// FrameComment contains a full-text comment field.
-type FrameComment struct {
-	Header      FrameHeader
-	Type        FrameType
-	Encoding    Encoding
-	Language    LanguageString
-	Description string
-	Text        string
-}
-
-// NewFrameComment creates a new full-text comment frame.
-func NewFrameComment(language, description, text string) *FrameComment {
-	return &FrameComment{
-		Type:        FrameTypeComment,
-		Encoding:    EncodingUTF8,
-		Language:    LanguageString(language),
-		Description: description,
-		Text:        text,
-	}
-}
-
-// FrameURL may contain the payload of any type of URL frame except
-// for the user-defined WXXX URL frame.
-type FrameURL struct {
-	Header FrameHeader
-	Type   FrameType
-	URL    WesternString
-}
-
-// NewFrameURL creates a URL frame of the requested type.
-func NewFrameURL(typ FrameType, url string) *FrameURL {
-	return &FrameURL{
-		Type: typ,
-		URL:  WesternString(url),
-	}
-}
-
-// FrameURLCustom contains a custom URL payload.
-type FrameURLCustom struct {
-	Header      FrameHeader
-	Type        FrameType
-	Encoding    Encoding
-	Description string
-	URL         WesternString
-}
-
-// NewFrameURLCustom creates a custom URL frame.
-func NewFrameURLCustom(description, url string) *FrameURLCustom {
-	return &FrameURLCustom{
-		Type:        FrameTypeURLCustom,
-		Encoding:    EncodingUTF8,
-		Description: description,
-		URL:         WesternString(url),
-	}
-}
+// All possible picture types.
+const (
+	PictureTypeOther PictureType = iota
+	PictureTypeIcon
+	PictureTypeIconOther
+	PictureTypeCoverFront
+	PictureTypeCoverBack
+	PictureTypeLeaflet
+	PictureTypeMedia
+	PictureTypeArtistLead
+	PictureTypeArtist
+	PictureTypeConductor
+	PictureTypeBand
+	PictureTypeComposer
+	PictureTypeLyricist
+	PictureTypeRecordingLocation
+	PictureTypeDuringRecording
+	PictureTypeDuringPerformance
+	PictureTypeVideoCapture
+	PictureTypeFish
+	PictureTypeIlllustration
+	PictureTypeBandLogotype
+	PictureTypePublisherLogotype
+)
 
 // FrameAttachedPicture contains the payload of an image frame.
 type FrameAttachedPicture struct {
@@ -370,39 +230,46 @@ func NewFrameAttachedPicture(mimeType, description string, typ PictureType, data
 	}
 }
 
-// FrameUniqueFileID contains a unique file identifier for the MP3.
-type FrameUniqueFileID struct {
-	Header     FrameHeader
-	Type       FrameType
-	Owner      WesternString
-	Identifier WesternString
+// FrameComment contains a full-text comment field.
+type FrameComment struct {
+	Header      FrameHeader
+	Type        FrameType
+	Encoding    Encoding
+	Language    LanguageString
+	Description string
+	Text        string
 }
 
-// NewFrameUniqueFileID creates a new Unique FileID frame.
-func NewFrameUniqueFileID(owner, id string) *FrameUniqueFileID {
-	return &FrameUniqueFileID{
-		Type:       FrameTypeUniqueFileID,
-		Owner:      WesternString(owner),
-		Identifier: WesternString(id),
+// NewFrameComment creates a new full-text comment frame.
+func NewFrameComment(language, description, text string) *FrameComment {
+	return &FrameComment{
+		Type:        FrameTypeComment,
+		Encoding:    EncodingUTF8,
+		Language:    LanguageString(language),
+		Description: description,
+		Text:        text,
 	}
 }
 
-// FrameTermsOfUse contains the terms of use description for the MP3.
-type FrameTermsOfUse struct {
-	Header   FrameHeader
-	Type     FrameType
-	Encoding Encoding
-	Language LanguageString
-	Text     string
+// FrameGroupID contains information describing the grouping of
+// otherwise unrelated frames. If a frame contains an optional group
+// identifier, there will be a corresponding GRID frame with data
+// describing the group.
+type FrameGroupID struct {
+	Header  FrameHeader
+	Type    FrameType
+	Owner   WesternString
+	GroupID GroupSymbol
+	Data    []byte
 }
 
-// NewFrameTermsOfUse creates a new terms-of-use frame.
-func NewFrameTermsOfUse(language, text string) *FrameTermsOfUse {
-	return &FrameTermsOfUse{
-		Type:     FrameTypeTermsOfUse,
-		Encoding: EncodingUTF8,
-		Language: LanguageString(language),
-		Text:     text,
+// NewFrameGroupID creates a new group identifier frame.
+func NewFrameGroupID(owner string, groupID GroupSymbol, data []byte) *FrameGroupID {
+	return &FrameGroupID{
+		Type:    FrameTypeGroupID,
+		Owner:   WesternString(owner),
+		GroupID: groupID,
+		Data:    data,
 	}
 }
 
@@ -427,6 +294,33 @@ func NewFrameLyricsUnsync(language, descriptor, lyrics string) *FrameLyricsUnsyn
 		Text:       lyrics,
 	}
 }
+
+// LyricContentType indicates type type of lyrics stored in a synchronized
+// lyric frame.
+type LyricContentType byte
+
+// All possible values of the LyricContentType type.
+const (
+	LyricContentTypeOther LyricContentType = iota
+	LyricContentTypeLyrics
+	LyricContentTypeTranscription
+	LyricContentTypeMovement
+	LyricContentTypeEvents
+	LyricContentTypeChord
+	LyricContentTypeTrivia
+	LyricContentTypeWebURL
+	LyricContentTypeImageURL
+)
+
+// TimeStampFormat indicates the type of time stamp used: milliseconds or
+// MPEG frame.
+type TimeStampFormat byte
+
+// All possible values of the TimeStampFormat type.
+const (
+	TimeStampFrames TimeStampFormat = 1 + iota
+	TimeStampMilliseconds
+)
 
 // LyricsSync describes a single syllable or event within a synchronized
 // lyric or text frame (SYLT).
@@ -476,70 +370,6 @@ func (f *FrameLyricsSync) AddSync(sync LyricsSync) {
 		f.Sync = append(f.Sync, LyricsSync{})
 		copy(f.Sync[i+1:], f.Sync[i:])
 		f.Sync[i] = sync
-	}
-}
-
-// TempoSync describes a tempo change.
-type TempoSync struct {
-	BPM       Tempo
-	TimeStamp uint32
-}
-
-// FrameSyncTempoCodes contains synchronized tempo codes.
-type FrameSyncTempoCodes struct {
-	Header          FrameHeader
-	Type            FrameType
-	TimeStampFormat TimeStampFormat
-	Sync            []TempoSync
-}
-
-// NewFrameSyncTempoCodes creates a new synchronized tempo codes frame.
-func NewFrameSyncTempoCodes(format TimeStampFormat) *FrameSyncTempoCodes {
-	return &FrameSyncTempoCodes{
-		Type:            FrameTypeSyncTempoCodes,
-		TimeStampFormat: format,
-		Sync:            []TempoSync{},
-	}
-}
-
-// AddSync inserts a time-stamped syllable into a synchronized lyric
-// frame. It inserts the syllable in sorted order by time stamp.
-func (f *FrameSyncTempoCodes) AddSync(sync TempoSync) {
-	var i int
-	for i = range f.Sync {
-		if f.Sync[i].TimeStamp > sync.TimeStamp {
-			break
-		}
-	}
-	switch {
-	case i == len(f.Sync):
-		f.Sync = append(f.Sync, sync)
-	default:
-		f.Sync = append(f.Sync, TempoSync{})
-		copy(f.Sync[i+1:], f.Sync[i:])
-		f.Sync[i] = sync
-	}
-}
-
-// FrameGroupID contains information describing the grouping of
-// otherwise unrelated frames. If a frame contains an optional group
-// identifier, there will be a corresponding GRID frame with data
-// describing the group.
-type FrameGroupID struct {
-	Header  FrameHeader
-	Type    FrameType
-	Owner   WesternString
-	GroupID GroupSymbol
-	Data    []byte
-}
-
-// NewFrameGroupID creates a new group identifier frame.
-func NewFrameGroupID(owner string, groupID GroupSymbol, data []byte) *FrameGroupID {
-	return &FrameGroupID{
-		Type:    FrameTypeGroupID,
-		Owner:   WesternString(owner),
-		GroupID: groupID,
-		Data:    data,
 	}
 }
 
@@ -595,83 +425,257 @@ func NewFramePopularimeter(email string, rating uint8, count uint64) *FramePopul
 	}
 }
 
+// TempoSync describes a tempo change.
+type TempoSync struct {
+	BPM       Tempo
+	TimeStamp uint32
+}
+
+// FrameSyncTempoCodes contains synchronized tempo codes.
+type FrameSyncTempoCodes struct {
+	Header          FrameHeader
+	Type            FrameType
+	TimeStampFormat TimeStampFormat
+	Sync            []TempoSync
+}
+
+// NewFrameSyncTempoCodes creates a new synchronized tempo codes frame.
+func NewFrameSyncTempoCodes(format TimeStampFormat) *FrameSyncTempoCodes {
+	return &FrameSyncTempoCodes{
+		Type:            FrameTypeSyncTempoCodes,
+		TimeStampFormat: format,
+		Sync:            []TempoSync{},
+	}
+}
+
+// AddSync inserts a time-stamped syllable into a synchronized lyric
+// frame. It inserts the syllable in sorted order by time stamp.
+func (f *FrameSyncTempoCodes) AddSync(sync TempoSync) {
+	var i int
+	for i = range f.Sync {
+		if f.Sync[i].TimeStamp > sync.TimeStamp {
+			break
+		}
+	}
+	switch {
+	case i == len(f.Sync):
+		f.Sync = append(f.Sync, sync)
+	default:
+		f.Sync = append(f.Sync, TempoSync{})
+		copy(f.Sync[i+1:], f.Sync[i:])
+		f.Sync[i] = sync
+	}
+}
+
+// FrameTermsOfUse contains the terms of use description for the MP3.
+type FrameTermsOfUse struct {
+	Header   FrameHeader
+	Type     FrameType
+	Encoding Encoding
+	Language LanguageString
+	Text     string
+}
+
+// NewFrameTermsOfUse creates a new terms-of-use frame.
+func NewFrameTermsOfUse(language, text string) *FrameTermsOfUse {
+	return &FrameTermsOfUse{
+		Type:     FrameTypeTermsOfUse,
+		Encoding: EncodingUTF8,
+		Language: LanguageString(language),
+		Text:     text,
+	}
+}
+
+// FrameText may contain the payload of any type of text frame
+// except for a custom text frame.  In v2.4, each text frame
+// may contain one or more text strings.  In all other versions, only one
+// text string may appear.
+type FrameText struct {
+	Header   FrameHeader
+	Type     FrameType
+	Encoding Encoding
+	Text     []string
+}
+
+// NewFrameText creates a new text frame payload with a single text string.
+func NewFrameText(typ FrameType, text string) *FrameText {
+	return &FrameText{
+		Type:     typ,
+		Encoding: EncodingUTF8,
+		Text:     []string{text},
+	}
+}
+
+// FrameTextCustom contains a custom text payload.
+type FrameTextCustom struct {
+	Header      FrameHeader
+	Type        FrameType
+	Encoding    Encoding
+	Description string
+	Text        string
+}
+
+// NewFrameTextCustom creates a new custom text frame payload.
+func NewFrameTextCustom(description, text string) *FrameTextCustom {
+	return &FrameTextCustom{
+		Type:        FrameTypeTextCustom,
+		Encoding:    EncodingUTF8,
+		Description: description,
+		Text:        text,
+	}
+}
+
+// FrameUnknown contains the payload of any frame whose ID is
+// unknown to this package.
+type FrameUnknown struct {
+	Header  FrameHeader
+	Type    FrameType
+	FrameID FrameID
+	Data    []byte
+}
+
+// NewFrameUnknown creates a new frame of unknown type.
+func NewFrameUnknown(id string, data []byte) *FrameUnknown {
+	return &FrameUnknown{
+		Type:    FrameTypeUnknown,
+		FrameID: FrameID(id),
+		Data:    data,
+	}
+}
+
+// FrameURL may contain the payload of any type of URL frame except
+// for the user-defined WXXX URL frame.
+type FrameURL struct {
+	Header FrameHeader
+	Type   FrameType
+	URL    WesternString
+}
+
+// NewFrameURL creates a URL frame of the requested type.
+func NewFrameURL(typ FrameType, url string) *FrameURL {
+	return &FrameURL{
+		Type: typ,
+		URL:  WesternString(url),
+	}
+}
+
+// FrameURLCustom contains a custom URL payload.
+type FrameURLCustom struct {
+	Header      FrameHeader
+	Type        FrameType
+	Encoding    Encoding
+	Description string
+	URL         WesternString
+}
+
+// NewFrameURLCustom creates a custom URL frame.
+func NewFrameURLCustom(description, url string) *FrameURLCustom {
+	return &FrameURLCustom{
+		Type:        FrameTypeURLCustom,
+		Encoding:    EncodingUTF8,
+		Description: description,
+		URL:         WesternString(url),
+	}
+}
+
+// FrameUniqueFileID contains a unique file identifier for the MP3.
+type FrameUniqueFileID struct {
+	Header     FrameHeader
+	Type       FrameType
+	Owner      WesternString
+	Identifier WesternString
+}
+
+// NewFrameUniqueFileID creates a new Unique FileID frame.
+func NewFrameUniqueFileID(owner, id string) *FrameUniqueFileID {
+	return &FrameUniqueFileID{
+		Type:       FrameTypeUniqueFileID,
+		Owner:      WesternString(owner),
+		Identifier: WesternString(id),
+	}
+}
+
+//
+// Frame list and type map
+//
+
 // frameList holds all possible frame payload types supported by ID3.
 var frameList = []struct {
 	frameType   FrameType
 	reflectType reflect.Type
 }{
-	{FrameTypeUnknown, reflect.TypeOf(FrameUnknown{})},
-	{FrameTypeTextAlbumArtist, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextGroupDescription, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextSongTitle, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextSongSubtitle, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextAlbumName, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextOriginalAlbum, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextTrackNumber, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextPartOfSet, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextSetSubtitle, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextISRC, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextArtist, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextAlbumArtist, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextConductor, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextRemixer, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextOriginalPerformer, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextLyricist, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextOriginalLyricist, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextComposer, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextMusicians, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextInvolvedPeople, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextEncodedBy, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextBPM, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextLengthInMs, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextMusicalKey, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextLanguage, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextGenre, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextFileType, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextMediaType, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextMood, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextCopyright, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextProducedNotice, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextPublisher, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextOwner, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextRadioStation, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextRadioStationOwner, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextOriginalFileName, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextPlaylistDelay, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextEncodingTime, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextOriginalReleaseTime, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextRecordingTime, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextReleaseTime, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextTaggingTime, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextEncodingSoftware, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextAlbumSortOrder, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextPerformerSortOrder, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextTitleSortOrder, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextDate, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextTime, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextRecordingDates, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextSize, reflect.TypeOf(FrameText{})},
-	{FrameTypeTextCustom, reflect.TypeOf(FrameTextCustom{})},
-	{FrameTypeURLCommercial, reflect.TypeOf(FrameURL{})},
-	{FrameTypeURLCopyright, reflect.TypeOf(FrameURL{})},
-	{FrameTypeURLAudioFile, reflect.TypeOf(FrameURL{})},
-	{FrameTypeURLArtist, reflect.TypeOf(FrameURL{})},
-	{FrameTypeURLAudioSource, reflect.TypeOf(FrameURL{})},
-	{FrameTypeURLRadioStation, reflect.TypeOf(FrameURL{})},
-	{FrameTypeURLPayment, reflect.TypeOf(FrameURL{})},
-	{FrameTypeURLPublisher, reflect.TypeOf(FrameURL{})},
-	{FrameTypeURLCustom, reflect.TypeOf(FrameURLCustom{})},
-	{FrameTypeComment, reflect.TypeOf(FrameComment{})},
 	{FrameTypeAttachedPicture, reflect.TypeOf(FrameAttachedPicture{})},
-	{FrameTypeUniqueFileID, reflect.TypeOf(FrameUniqueFileID{})},
-	{FrameTypeTermsOfUse, reflect.TypeOf(FrameTermsOfUse{})},
-	{FrameTypeLyricsUnsync, reflect.TypeOf(FrameLyricsUnsync{})},
-	{FrameTypeLyricsSync, reflect.TypeOf(FrameLyricsSync{})},
-	{FrameTypeSyncTempoCodes, reflect.TypeOf(FrameSyncTempoCodes{})},
+	{FrameTypeComment, reflect.TypeOf(FrameComment{})},
 	{FrameTypeGroupID, reflect.TypeOf(FrameGroupID{})},
-	{FrameTypePrivate, reflect.TypeOf(FramePrivate{})},
+	{FrameTypeLyricsSync, reflect.TypeOf(FrameLyricsSync{})},
+	{FrameTypeLyricsUnsync, reflect.TypeOf(FrameLyricsUnsync{})},
 	{FrameTypePlayCount, reflect.TypeOf(FramePlayCount{})},
 	{FrameTypePopularimeter, reflect.TypeOf(FramePopularimeter{})},
+	{FrameTypePrivate, reflect.TypeOf(FramePrivate{})},
+	{FrameTypeSyncTempoCodes, reflect.TypeOf(FrameSyncTempoCodes{})},
+	{FrameTypeTermsOfUse, reflect.TypeOf(FrameTermsOfUse{})},
+	{FrameTypeTextAlbumArtist, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextAlbumArtist, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextAlbumName, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextAlbumSortOrder, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextArtist, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextBPM, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextComposer, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextConductor, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextCopyright, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextCustom, reflect.TypeOf(FrameTextCustom{})},
+	{FrameTypeTextDate, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextEncodedBy, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextEncodingSoftware, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextEncodingTime, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextFileType, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextGenre, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextGroupDescription, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextInvolvedPeople, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextISRC, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextLanguage, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextLengthInMs, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextLyricist, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextMediaType, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextMood, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextMusicalKey, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextMusicians, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextOriginalAlbum, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextOriginalFileName, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextOriginalLyricist, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextOriginalPerformer, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextOriginalReleaseTime, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextOwner, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextPartOfSet, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextPerformerSortOrder, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextPlaylistDelay, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextProducedNotice, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextPublisher, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextRadioStation, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextRadioStationOwner, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextRecordingDates, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextRecordingTime, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextReleaseTime, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextRemixer, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextSetSubtitle, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextSize, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextSongSubtitle, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextSongTitle, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextTaggingTime, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextTime, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextTitleSortOrder, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextTrackNumber, reflect.TypeOf(FrameText{})},
+	{FrameTypeUniqueFileID, reflect.TypeOf(FrameUniqueFileID{})},
+	{FrameTypeUnknown, reflect.TypeOf(FrameUnknown{})},
+	{FrameTypeURLArtist, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLAudioFile, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLAudioSource, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLCommercial, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLCopyright, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLCustom, reflect.TypeOf(FrameURLCustom{})},
+	{FrameTypeURLPayment, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLPublisher, reflect.TypeOf(FrameURL{})},
+	{FrameTypeURLRadioStation, reflect.TypeOf(FrameURL{})},
 }
 
 type frameTypeMap struct {
