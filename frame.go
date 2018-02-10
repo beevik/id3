@@ -117,6 +117,11 @@ const (
 	FrameTypeTextRecordingDates // TRDA (v2.3 only, subsumed by TDRC in v2.4)
 	FrameTypeTextSize           // TSIZ (v2.3 only)
 
+	// Text frames: non-standard frames that commonly appear in the wild
+	FrameTypeTextCompilationItunes       // TCMP (iTunes)
+	FrameTypeTextAlbumSortOrderItunes    // TSO2 (iTunes)
+	FrameTypeTextComposerSortOrderItunes // TSOC (iTunes)
+
 	// Text frames: custom text
 	FrameTypeTextCustom // TXXX
 
@@ -698,9 +703,12 @@ var frameList = []struct {
 	{FrameTypeTextAlbumArtist, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextAlbumName, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextAlbumSortOrder, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextAlbumSortOrderItunes, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextArtist, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextBPM, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextCompilationItunes, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextComposer, reflect.TypeOf(FrameText{})},
+	{FrameTypeTextComposerSortOrderItunes, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextConductor, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextCopyright, reflect.TypeOf(FrameText{})},
 	{FrameTypeTextCustom, reflect.TypeOf(FrameTextCustom{})},
