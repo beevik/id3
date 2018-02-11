@@ -13,7 +13,7 @@ type Tag struct {
 	Size         int      // Size not including the header
 	Padding      int      // Number of bytes of padding
 	CRC          uint32   // Optional CRC code
-	Restrictions uint16   // ID3 restrictions (v2.4 only)
+	Restrictions uint8    // ID3 restrictions (v2.4 only)
 	Frames       []Frame  // All ID3 frames included in the tag
 }
 
@@ -34,11 +34,11 @@ const (
 
 func newCodec(v Version) (codec, error) {
 	switch v {
-	case V22:
+	case Version2_2:
 		return newCodec22(), nil
-	case V23:
+	case Version2_3:
 		return newCodec23(), nil
-	case V24:
+	case Version2_4:
 		return newCodec24(), nil
 	default:
 		return nil, ErrInvalidVersion
@@ -109,7 +109,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	if (t.Flags & TagFlagHasCRC) != 0 {
 		crc := crc32.ChecksumIEEE(rb.Bytes())
 		if crc != t.CRC {
-			return n, ErrInvalidCRC
+			return n, ErrFailedCRC
 		}
 	}
 
@@ -175,7 +175,12 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 		}
 	}
 
-	// If the tag's unsync flag is set, add unsync codes to the frame buffer.
+	// Calculate CRC if requested.
+	if (t.Flags & TagFlagHasCRC) != 0 {
+		t.CRC = uint32(crc32.ChecksumIEEE(buf.Bytes()))
+	}
+
+	// Unsynchronize the tag if requested.
 	b := buf.Bytes()
 	if (t.Flags & TagFlagUnsync) != 0 {
 		b = addUnsyncCodes(b)
@@ -193,6 +198,13 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 
 	// Write the header to the output stream.
 	nn, err := w.Write(hdr)
+	n += int64(nn)
+	if err != nil {
+		return n, err
+	}
+
+	// Write the extended header.
+	nn, err = codec.EncodeExtendedHeader(t, w)
 	n += int64(nn)
 	if err != nil {
 		return n, err

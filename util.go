@@ -9,13 +9,13 @@ import (
 func decodeSyncSafeUint32(b []byte) (value uint32, err error) {
 	l := len(b)
 	if l < 4 || l > 5 {
-		return 0, ErrBadSync
+		return 0, ErrInvalidSync
 	}
 
 	var tmp uint64
 	for i := 0; i < l; i++ {
 		if (b[i] & 0x80) != 0 {
-			return 0, ErrBadSync
+			return 0, ErrInvalidSync
 		}
 		tmp = (tmp << 7) | uint64(b[i])
 	}
@@ -26,10 +26,10 @@ func decodeSyncSafeUint32(b []byte) (value uint32, err error) {
 func encodeSyncSafeUint32(b []byte, value uint32) error {
 	l := len(b)
 	if l < 4 || l > 5 {
-		return ErrBadSync
+		return ErrInvalidSync
 	}
 	if l == 4 && value > 0x0fffffff {
-		return ErrBadSync
+		return ErrInvalidSync
 	}
 
 	for i := l - 1; i >= 0; i-- {
@@ -133,4 +133,5 @@ func (f flagMap) Encode(flags uint32) uint32 {
 type boundsMap map[string]struct {
 	min int
 	max int
+	err error
 }

@@ -12,6 +12,53 @@ type FrameHeader struct {
 	DataLength    uint32     // Optional data length (if FrameFlagHasDataLength is set)
 }
 
+// SetFlag sets the requested frame flag on or off.
+func (h *FrameHeader) SetFlag(flag FrameFlags, value bool) {
+	switch {
+	case (flag & (FrameFlagEncrypted | FrameFlagHasGroupID)) != 0:
+		// ignore. SetGroupID or SetEncryptMethod should be used instead.
+	case value == true:
+		h.Flags |= flag
+	case value == false:
+		h.Flags &= ^flag
+	}
+}
+
+// SetGroupID sets a group identifier on the frame. The id value must be
+// between 0x80 and 0xf0, and the tag must also have a group description frame
+// for the id. Use an id of 0 to clear the frame's group identifier.
+func (h *FrameHeader) SetGroupID(id uint8) error {
+	switch {
+	case id == 0:
+		h.GroupID = 0
+		h.Flags &= ^FrameFlagHasGroupID
+	case id >= 0x80 && id <= 0xf0:
+		h.GroupID = id
+		h.Flags |= FrameFlagHasGroupID
+	default:
+		return ErrInvalidGroupID
+	}
+	return nil
+}
+
+// SetEncryptMethod sets an encryption method on the frame. The method value
+// must be between 0x80 and 0xf0, and the tag must also have an encryption
+// frame for the method value. Use a method value of 0 to clear the frame's
+// encryption method.
+func (h *FrameHeader) SetEncryptMethod(method uint8) error {
+	switch {
+	case method == 0:
+		h.EncryptMethod = 0
+		h.Flags &= ^FrameFlagEncrypted
+	case method >= 0x80 && method <= 0xf0:
+		h.EncryptMethod = method
+		h.Flags |= FrameFlagEncrypted
+	default:
+		return ErrInvalidEncryptMethod
+	}
+	return nil
+}
+
 // A WesternString is a string that is always saved into the tag using
 // ISO 8559-1 encoding.
 type WesternString string
@@ -25,7 +72,7 @@ const (
 	FrameFlagDiscardOnTagAlteration  FrameFlags = 1 << iota // Discard frame if tag is altered
 	FrameFlagDiscardOnFileAlteration                        // Discard frame if file is altered
 	FrameFlagReadOnly                                       // Frame is read-only
-	FrameFlagHasGroupInfo                                   // Frame has group info
+	FrameFlagHasGroupID                                     // Frame has group info
 	FrameFlagCompressed                                     // Frame is compressed
 	FrameFlagEncrypted                                      // Frame is encrypted
 	FrameFlagUnsynchronized                                 // Frame is unsynchronized
@@ -157,12 +204,12 @@ const (
 type Frame interface {
 }
 
-// HeaderOf returns the header data associated with the frame.
-func HeaderOf(f Frame) FrameHeader {
-	var hdr FrameHeader
+// HeaderOf returns a pointer to the frame's header data.
+func HeaderOf(f Frame) *FrameHeader {
+	var hdr *FrameHeader
 	ft := reflect.ValueOf(f).Elem()
 	hv := reflect.ValueOf(&hdr).Elem()
-	hv.Set(ft.Field(0))
+	hv.Set(ft.Field(0).Addr())
 	return hdr
 }
 

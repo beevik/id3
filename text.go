@@ -77,7 +77,7 @@ func decodeNextString(b []byte, enc Encoding) (s string, remain []byte, err erro
 			}
 		}
 		if !utf8.Valid(ns) {
-			return "", b, ErrBadText
+			return "", b, ErrInvalidText
 		}
 		return string(ns), b[consumed:], nil
 
@@ -90,7 +90,7 @@ func decodeNextString(b []byte, enc Encoding) (s string, remain []byte, err erro
 			start = 2
 		}
 		if (len(b) & 1) != 0 {
-			return "", b, ErrBadText
+			return "", b, ErrInvalidText
 		}
 		u := make([]uint16, 0, len(b)/2)
 		j := 0
@@ -106,7 +106,7 @@ func decodeNextString(b []byte, enc Encoding) (s string, remain []byte, err erro
 		return string(utf16.Decode(u)), b[consumed:], nil
 
 	default:
-		return "", b, ErrBadText
+		return "", b, ErrInvalidText
 	}
 }
 
@@ -144,7 +144,7 @@ func encodeString(s string, enc Encoding) ([]byte, error) {
 		return b, nil
 
 	default:
-		return nil, ErrBadText
+		return nil, ErrInvalidText
 	}
 }
 

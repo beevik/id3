@@ -29,18 +29,18 @@ func newCodec24() *codec24 {
 			{1 << 14, uint32(FrameFlagDiscardOnTagAlteration)},
 			{1 << 13, uint32(FrameFlagDiscardOnFileAlteration)},
 			{1 << 12, uint32(FrameFlagReadOnly)},
-			{1 << 6, uint32(FrameFlagHasGroupInfo)},
+			{1 << 6, uint32(FrameFlagHasGroupID)},
 			{1 << 3, uint32(FrameFlagCompressed)},
 			{1 << 2, uint32(FrameFlagEncrypted)},
 			{1 << 1, uint32(FrameFlagUnsynchronized)},
 			{1 << 0, uint32(FrameFlagHasDataLength)},
 		},
 		bounds: boundsMap{
-			"Encoding":         {0, 3},
-			"GroupID":          {0x80, 0xf0},
-			"LyricContentType": {0, 8},
-			"PictureType":      {0, 20},
-			"TimeStampFormat":  {1, 2},
+			"Encoding":         {0, 3, ErrInvalidEncoding},
+			"GroupID":          {0x80, 0xf0, ErrInvalidGroupID},
+			"LyricContentType": {0, 8, ErrInvalidLyricContentType},
+			"PictureType":      {0, 20, ErrInvalidPictureType},
+			"TimeStampFormat":  {1, 2, ErrInvalidTimeStampFormat},
 		},
 		frameTypes: newFrameTypeMap(map[FrameType]string{
 			FrameTypeAttachedPicture:             "APIC",
@@ -196,7 +196,7 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 		if buf.err != nil || data[0] != 1 {
 			return buf.n, ErrInvalidHeader
 		}
-		t.Restrictions = uint16(data[0])<<8 | uint16(data[1])
+		t.Restrictions = data[1]
 	}
 
 	return buf.n, buf.err
@@ -290,10 +290,10 @@ func (c *codec24) scanExtraHeaderData(buf *buffer, h *FrameHeader) {
 		return
 	}
 
-	if (h.Flags & FrameFlagHasGroupInfo) != 0 {
+	if (h.Flags & FrameFlagHasGroupID) != 0 {
 		gid := buf.ConsumeByte()
 		if buf.err != nil || gid < 0x80 || gid > 0xf0 {
-			buf.err = ErrInvalidFrameHeader
+			buf.err = ErrInvalidGroupID
 			return
 		}
 		h.GroupID = gid
@@ -302,7 +302,7 @@ func (c *codec24) scanExtraHeaderData(buf *buffer, h *FrameHeader) {
 	if (h.Flags & FrameFlagEncrypted) != 0 {
 		em := buf.ConsumeByte()
 		if buf.err != nil || em < 0x80 || em > 0xf0 {
-			buf.err = ErrInvalidFrameHeader
+			buf.err = ErrInvalidEncryptMethod
 			return
 		}
 		h.EncryptMethod = em
@@ -407,7 +407,7 @@ func (c *codec24) scanUint8(buf *buffer, p property, state *state) {
 	}
 
 	if hasBounds && (value < uint8(bounds.min) || value > uint8(bounds.max)) {
-		buf.err = ErrInvalidFrame
+		buf.err = bounds.err
 		return
 	}
 
@@ -464,11 +464,6 @@ func (c *codec24) scanUint64(buf *buffer, p property, state *state) {
 		b = buf.ConsumeAll()
 	default:
 		panic(errUnknownFieldType)
-	}
-
-	if buf.err != nil {
-		buf.err = ErrInvalidFrame
-		return
 	}
 
 	var value uint64
@@ -528,7 +523,7 @@ func (c *codec24) scanUint32Slice(buf *buffer, p property, state *state) {
 		}
 
 	default:
-		buf.err = ErrInvalidFrame
+		buf.err = ErrInvalidBits
 		return
 	}
 
@@ -612,6 +607,42 @@ func (c *codec24) scanString(buf *buffer, p property, state *state) {
 	p.value.SetString(str)
 }
 
+func (c *codec24) EncodeExtendedHeader(t *Tag, w io.Writer) (int, error) {
+	buf := newBuffer()
+
+	// Placeholder for size and flags
+	buf.AddBytes([]byte{0, 0, 0, 0, 1, 0})
+
+	var flags uint8
+	if (t.Flags & TagFlagIsUpdate) != 0 {
+		buf.AddByte(0)
+		flags |= (1 << 6)
+	}
+
+	if (t.Flags & TagFlagHasCRC) != 0 {
+		buf.AddByte(5)
+		b := make([]byte, 5)
+		encodeSyncSafeUint32(b, t.CRC)
+		buf.AddBytes(b)
+		flags |= (1 << 5)
+	}
+
+	if (t.Flags & TagFlagHasRestrictions) != 0 {
+		buf.AddByte(1)
+		buf.AddByte(t.Restrictions)
+		flags |= (1 << 4)
+	}
+
+	if flags != 0 {
+		b := buf.Bytes()
+		encodeSyncSafeUint32(b[0:4], uint32(buf.Len()))
+		b[5] = flags
+
+		return w.Write(b)
+	}
+	return 0, nil
+}
+
 func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
 	buf := newBuffer()
 
@@ -631,26 +662,58 @@ func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
 	h.FrameID = c.frameTypes.LookupFrameID(state.frameType)
 	h.Size = buf.Len()
 
+	// TODO: Perform frame-only unsync
+
+	exBuf := newBuffer()
+	if h.Flags != 0 {
+		c.outputExtraHeaderData(exBuf, h)
+		h.Size += exBuf.Len()
+	}
+
 	hdr := make([]byte, 10)
-
 	encodeSyncSafeUint32(hdr[4:8], uint32(h.Size))
-
 	copy(hdr[0:4], []byte(h.FrameID))
-
 	flags := c.frameFlags.Encode(uint32(h.Flags))
 	hdr[8] = byte(flags >> 8)
 	hdr[9] = byte(flags)
-
-	// TODO: Handle extended header creation
 
 	n, err := w.Write(hdr)
 	if err != nil {
 		return n, err
 	}
 
+	exBuf.Write(w)
+	n += exBuf.n
+
 	buf.Write(w)
 	n += buf.n
 	return n, buf.err
+}
+
+func (c *codec24) outputExtraHeaderData(buf *buffer, h *FrameHeader) {
+	if (h.Flags & FrameFlagCompressed) != 0 {
+		h.Flags |= FrameFlagHasDataLength
+	}
+
+	if (h.Flags & FrameFlagHasGroupID) != 0 {
+		if h.GroupID < 0x80 || h.GroupID > 0xf0 {
+			buf.err = ErrInvalidGroupID
+		}
+		buf.AddByte(h.GroupID)
+	}
+
+	if (h.Flags & FrameFlagEncrypted) != 0 {
+		if h.EncryptMethod < 0x80 || h.EncryptMethod > 0xf0 {
+			buf.err = ErrInvalidEncryptMethod
+		}
+		buf.AddByte(h.EncryptMethod)
+	}
+
+	if (h.Flags & FrameFlagHasDataLength) != 0 {
+		b := make([]byte, 4)
+		buf.err = encodeSyncSafeUint32(b, uint32(h.Size))
+		buf.AddBytes(b)
+	}
 }
 
 func (c *codec24) outputStruct(buf *buffer, p property, state *state) {
@@ -732,7 +795,7 @@ func (c *codec24) outputUint8(buf *buffer, p property, state *state) {
 	bounds, hasBounds := c.bounds[p.name]
 
 	if hasBounds && (value < uint8(bounds.min) || value > uint8(bounds.max)) {
-		buf.err = ErrInvalidFrame
+		buf.err = bounds.err
 		return
 	}
 
@@ -752,7 +815,7 @@ func (c *codec24) outputUint16(buf *buffer, p property, state *state) {
 	switch p.name {
 	case "BPM":
 		if v > 2*0xff {
-			buf.err = ErrInvalidFrame
+			buf.err = ErrInvalidBPM
 			return
 		}
 		if v < 0xff {
@@ -842,7 +905,7 @@ func (c *codec24) outputUint32Slice(buf *buffer, p property, state *state) {
 		}
 
 	default:
-		buf.err = ErrInvalidFrame
+		buf.err = ErrInvalidBits
 	}
 }
 

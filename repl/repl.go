@@ -93,9 +93,14 @@ func usage() {
 }
 
 func writeTag() {
-	tag := id3.Tag{Version: id3.V24}
+	tag := id3.Tag{Version: id3.Version2_4}
+	tag.Flags |= id3.TagFlagHasCRC
 
 	com := id3.NewFrameComment("eng", "foo", "comment")
+	com.Header.SetGroupID(0x90)
+	com.Header.SetEncryptMethod(0xf0)
+	com.Header.SetFlag(id3.FrameFlagCompressed, true)
+	com.Header.SetFlag(id3.FrameFlagHasDataLength, true)
 	tag.Frames = append(tag.Frames, com)
 
 	lyr := id3.NewFrameLyricsSync("eng", "lyrics", id3.TimeStampMilliseconds, id3.LyricContentTypeTranscription)

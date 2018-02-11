@@ -118,6 +118,10 @@ func (b *buffer) ConsumeAll() []byte {
 }
 
 func (b *buffer) Write(w io.Writer) {
+	if b.err != nil {
+		return
+	}
+
 	var n int
 	n, b.err = w.Write(b.buf)
 	b.n += n
