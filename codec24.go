@@ -43,6 +43,7 @@ func newCodec24() *codec24 {
 		},
 		frameTypes: newFrameTypeMap(map[FrameType]string{
 			FrameTypeAttachedPicture:             "APIC",
+			FrameTypeAudioEncryption:             "AENC",
 			FrameTypeAudioSeekPointIndex:         "ASPI",
 			FrameTypeComment:                     "COMM",
 			FrameTypeGroupID:                     "GRID",
@@ -131,8 +132,8 @@ type state struct {
 	frameType  FrameType
 	encoding   Encoding // used by text frames
 	bits       uint8    // used by ASPI frame
-	fieldIndex int
-	fieldCount int
+	fieldCount int      // number of fields in the frame payload struct
+	fieldIndex int      // current field in the frame payload struct
 }
 
 func (c *codec24) HeaderFlags() flagMap {
@@ -698,7 +699,6 @@ func (c *codec24) outputUint8(o *obuf, p property, state *state) {
 
 	if p.typ.Name() == "FrameType" {
 		state.frameType = FrameType(value)
-		state.frameID = c.frameTypes.LookupFrameID(state.frameType)
 		return
 	}
 
@@ -792,17 +792,24 @@ func (c *codec24) outputFloat32Slice(o *obuf, p property, state *state) {
 	}
 
 	n := p.value.Len()
-	sl := p.value.Slice(0, n)
+	slice := p.value.Slice(0, n)
 
 	switch state.bits {
 	case 8:
 		for i := 0; i < n; i++ {
-			o.WriteByte(byte(sl.Index(i).Float() * float64(1<<8)))
+			v := uint32(slice.Index(i).Float() * float64(1<<8))
+			if v >= (1 << 8) {
+				v = (1 << 8) - 1
+			}
+			o.WriteByte(byte(v))
 		}
 
 	case 16:
 		for i := 0; i < n; i++ {
-			v := uint32(sl.Index(i).Float() * float64(1<<16))
+			v := uint32(slice.Index(i).Float() * float64(1<<16))
+			if v >= (1 << 16) {
+				v = (1 << 16) - 1
+			}
 			b := []byte{uint8(v >> 8), byte(uint8(v))}
 			o.WriteBytes(b)
 		}
@@ -838,10 +845,10 @@ func (c *codec24) outputStructSlice(o *obuf, p property, state *state, depth int
 	}
 
 	n := p.value.Len()
-	sl := p.value.Slice(0, n)
+	slice := p.value.Slice(0, n)
 
 	for i := 0; i < n; i++ {
-		elem := sl.Index(i)
+		elem := slice.Index(i)
 
 		ep := property{
 			typ:   elem.Type(),
