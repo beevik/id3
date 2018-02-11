@@ -122,20 +122,17 @@ func newCodec24() *codec24 {
 // value. Usually the property is a struct field.
 type property struct {
 	typ   reflect.Type
-	name  string // field name if the property is a struct field
 	value reflect.Value
 }
 
 // The state structure keeps track of persistent state required while
 // decoding a single frame.
 type state struct {
-	frameID           FrameID
-	frameType         FrameType
-	encoding          Encoding // used by text frames
-	bits              uint8    // used by ASPI frame
-	fieldCount        int      // number of fields in the frame payload struct
-	fieldIndex        int      // current field in the frame payload struct
-	indexedDataLength uint32   // used for ASPI frames
+	frameID    FrameID       // current frame ID
+	frameType  FrameType     // current frame type
+	frameValue reflect.Value // current frame's reflected struct value
+	fieldCount int           // current frame's field count
+	fieldIndex int           // current frame field index
 }
 
 func (c *codec24) HeaderFlags() flagMap {
@@ -260,8 +257,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 
 	// Initialize the frame payload scan state.
 	state := state{
-		frameID:  header.FrameID,
-		encoding: EncodingISO88591,
+		frameID: header.FrameID,
 	}
 
 	// Use reflection to interpret the payload's contents.
@@ -324,6 +320,7 @@ func (c *codec24) scanStruct(s *buffer, p property, state *state, depth int) {
 	}
 
 	if depth == 0 {
+		state.frameValue = p.value.Elem()
 		state.fieldCount = p.typ.NumField()
 	}
 
@@ -336,7 +333,6 @@ func (c *codec24) scanStruct(s *buffer, p property, state *state, depth int) {
 
 		fp := property{
 			typ:   field.Type,
-			name:  field.Name,
 			value: p.value.Elem().Field(ii),
 		}
 
@@ -402,13 +398,6 @@ func (c *codec24) scanUint8(buf *buffer, p property, state *state) {
 		return
 	}
 
-	switch p.typ.Name() {
-	case "Encoding":
-		state.encoding = Encoding(value)
-	case "Bits":
-		state.bits = value
-	}
-
 	p.value.SetUint(uint64(value))
 }
 
@@ -446,10 +435,6 @@ func (c *codec24) scanUint32(buf *buffer, p property, state *state) {
 	var value uint64
 	for _, bb := range b {
 		value = (value << 8) | uint64(bb)
-	}
-
-	if state.frameType == FrameTypeAudioSeekPointIndex && p.name == "IndexedDataLength" {
-		state.indexedDataLength = uint32(value)
 	}
 
 	p.value.SetUint(value)
@@ -499,17 +484,20 @@ func (c *codec24) scanUint32Slice(buf *buffer, p property, state *state) {
 		panic(errUnknownFieldType)
 	}
 
+	length := uint32(state.frameValue.FieldByName("IndexedDataLength").Uint())
+	bits := uint32(state.frameValue.FieldByName("BitsPerIndex").Uint())
+
 	var offsets []IndexOffset
 
 	ff := buf.ConsumeAll()
-	switch state.bits {
+	switch bits {
 	case 8:
 		offsets = make([]IndexOffset, len(ff))
 		for _, f := range ff {
 			frac := uint32(f)
-			offset := (frac*state.indexedDataLength + (1 << 7)) << 8
-			if offset > state.indexedDataLength {
-				offset = state.indexedDataLength
+			offset := (frac*length + (1 << 7)) << 8
+			if offset > length {
+				offset = length
 			}
 			offsets = append(offsets, IndexOffset(offset))
 		}
@@ -518,9 +506,9 @@ func (c *codec24) scanUint32Slice(buf *buffer, p property, state *state) {
 		offsets = make([]IndexOffset, len(ff)/2)
 		for ii := 0; ii < len(ff); ii += 2 {
 			frac := uint32(ff[ii])<<8 | uint32(ff[ii+1])
-			offset := (frac*state.indexedDataLength + (1 << 15)) << 16
-			if offset > state.indexedDataLength {
-				offset = state.indexedDataLength
+			offset := (frac*length + (1 << 15)) << 16
+			if offset > length {
+				offset = length
 			}
 			offsets = append(offsets, IndexOffset(offset))
 		}
@@ -538,7 +526,8 @@ func (c *codec24) scanStringSlice(buf *buffer, p property, state *state) {
 		return
 	}
 
-	ss := buf.ConsumeStrings(state.encoding)
+	enc := Encoding(state.frameValue.FieldByName("Encoding").Uint())
+	ss := buf.ConsumeStrings(enc)
 	if buf.err != nil {
 		return
 	}
@@ -583,9 +572,12 @@ func (c *codec24) scanString(buf *buffer, p property, state *state) {
 		return
 	}
 
-	enc := state.encoding
-	if p.typ.Name() == "WesternString" {
+	var enc Encoding
+	switch p.typ.Name() {
+	case "WesternString":
 		enc = EncodingISO88591
+	default:
+		enc = Encoding(state.frameValue.FieldByName("Encoding").Uint())
 	}
 
 	var str string
@@ -610,9 +602,7 @@ func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
 		typ:   reflect.TypeOf(f).Elem(),
 		value: reflect.ValueOf(f).Elem(),
 	}
-	state := state{
-		encoding: EncodingISO88591,
-	}
+	state := state{}
 
 	c.outputStruct(buf, p, &state, 0)
 	if buf.err != nil {
@@ -651,6 +641,7 @@ func (c *codec24) outputStruct(buf *buffer, p property, state *state, depth int)
 	}
 
 	if depth == 0 {
+		state.frameValue = p.value
 		state.fieldCount = p.typ.NumField()
 	}
 
@@ -663,7 +654,6 @@ func (c *codec24) outputStruct(buf *buffer, p property, state *state, depth int)
 
 		fp := property{
 			typ:   field.Type,
-			name:  field.Name,
 			value: p.value.Field(i),
 		}
 
@@ -729,13 +719,6 @@ func (c *codec24) outputUint8(buf *buffer, p property, state *state) {
 	if buf.err != nil {
 		return
 	}
-
-	switch p.typ.Name() {
-	case "Encoding":
-		state.encoding = Encoding(value)
-	case "Bits":
-		state.bits = value
-	}
 }
 
 func (c *codec24) outputUint16(buf *buffer, p property, state *state) {
@@ -770,10 +753,6 @@ func (c *codec24) outputUint32(buf *buffer, p property, state *state) {
 
 	v := uint32(p.value.Uint())
 	b := []byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)}
-
-	if state.frameType == FrameTypeAudioSeekPointIndex && p.name == "IndexedDataLength" {
-		state.indexedDataLength = v
-	}
 
 	buf.AddBytes(b)
 }
@@ -812,14 +791,17 @@ func (c *codec24) outputUint32Slice(buf *buffer, p property, state *state) {
 		panic(errUnknownFieldType)
 	}
 
+	length := uint32(state.frameValue.FieldByName("IndexedDataLength").Uint())
+	bits := uint32(state.frameValue.FieldByName("BitsPerIndex").Uint())
+
 	n := p.value.Len()
 	slice := p.value.Slice(0, n)
 
-	switch state.bits {
+	switch bits {
 	case 8:
 		for i := 0; i < n; i++ {
 			offset := uint32(slice.Index(i).Uint())
-			frac := (offset << 8) / state.indexedDataLength
+			frac := (offset << 8) / length
 			if frac >= (1 << 8) {
 				frac = (1 << 8) - 1
 			}
@@ -829,7 +811,7 @@ func (c *codec24) outputUint32Slice(buf *buffer, p property, state *state) {
 	case 16:
 		for i := 0; i < n; i++ {
 			offset := uint32(slice.Index(i).Uint())
-			frac := (offset << 16) / state.indexedDataLength
+			frac := (offset << 16) / length
 			if frac >= (1 << 16) {
 				frac = (1 << 16) - 1
 			}
@@ -857,9 +839,11 @@ func (c *codec24) outputStringSlice(buf *buffer, p property, state *state) {
 		return
 	}
 
+	enc := Encoding(state.frameValue.FieldByName("Encoding").Uint())
+
 	var ss []string
 	reflect.ValueOf(&ss).Elem().Set(p.value)
-	buf.AddStrings(ss, state.encoding)
+	buf.AddStrings(ss, enc)
 }
 
 func (c *codec24) outputStructSlice(buf *buffer, p property, state *state, depth int) {
@@ -897,9 +881,12 @@ func (c *codec24) outputString(buf *buffer, p property, state *state, depth int)
 		return
 	}
 
-	enc := state.encoding
-	if p.typ.Name() == "WesternString" {
+	var enc Encoding
+	switch p.typ.Name() {
+	case "WesternString":
 		enc = EncodingISO88591
+	default:
+		enc = Encoding(state.frameValue.FieldByName("Encoding").Uint())
 	}
 
 	switch p.typ.Name() {
