@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"os"
@@ -10,23 +11,6 @@ import (
 )
 
 func main() {
-
-	sp := id3.NewFrameAudioSeekPointIndex(0, 1000)
-	sp.AddIndex(0.1134)
-	sp.AddIndex(0.0034)
-	sp.AddIndex(0.928)
-	fmt.Printf("%v %v\n", sp.IndexPoints, sp.Indexes)
-
-	lyr := id3.NewFrameLyricsSync("eng", "lyrics", id3.TimeStampMilliseconds, id3.LyricContentTypeTranscription)
-	lyr.AddSync(id3.LyricsSync{Text: "c", TimeStamp: 3})
-	lyr.AddSync(id3.LyricsSync{Text: "a", TimeStamp: 1})
-	lyr.AddSync(id3.LyricsSync{Text: "b", TimeStamp: 2})
-
-	var f id3.Frame = lyr
-	if tf, ok := f.(*id3.FrameLyricsSync); ok {
-		fmt.Printf("%v\n", tf.Sync)
-	}
-
 	flag.Parse()
 	args := flag.Args()
 	if len(args) == 0 {
@@ -34,6 +18,8 @@ func main() {
 		args[0] = "file.mp3"
 		//usage()
 	}
+
+	writeTag()
 
 	file, err := os.Open(args[0])
 	if err != nil {
@@ -104,4 +90,37 @@ func main() {
 func usage() {
 	fmt.Println(`Syntax: id3repl [file]`)
 	os.Exit(0)
+}
+
+func writeTag() {
+	tag := id3.Tag{Version: id3.V24}
+
+	com := id3.NewFrameComment("eng", "foo", "comment")
+	tag.Frames = append(tag.Frames, com)
+
+	lyr := id3.NewFrameLyricsSync("eng", "lyrics", id3.TimeStampMilliseconds, id3.LyricContentTypeTranscription)
+	lyr.AddSync(id3.LyricsSync{Text: "c", TimeStamp: 3})
+	lyr.AddSync(id3.LyricsSync{Text: "a", TimeStamp: 1})
+	lyr.AddSync(id3.LyricsSync{Text: "b", TimeStamp: 2})
+	tag.Frames = append(tag.Frames, lyr)
+
+	playcount := id3.NewFramePlayCount(0x1234567890aabbcc)
+	tag.Frames = append(tag.Frames, playcount)
+
+	title := id3.NewFrameText(id3.FrameTypeTextSongTitle, "Yellow Submarine")
+	tag.Frames = append(tag.Frames, title)
+
+	priv := id3.NewFramePrivate("owner", []byte{0, 1, 2, 3})
+	tag.Frames = append(tag.Frames, priv)
+
+	sp := id3.NewFrameAudioSeekPointIndex(0, 1000)
+	sp.AddIndex(0.1134)
+	sp.AddIndex(0.0034)
+	sp.AddIndex(0.928)
+	sp.AddIndex(0.5)
+
+	tag.Frames = append(tag.Frames, sp)
+
+	buf := bytes.NewBuffer([]byte{})
+	tag.WriteTo(buf)
 }

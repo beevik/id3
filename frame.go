@@ -433,6 +433,7 @@ func NewFrameLyricsSync(language, descriptor string,
 		Language:    LanguageString(language),
 		Format:      format,
 		ContentType: typ,
+		Descriptor:  descriptor,
 		Sync:        []LyricsSync{},
 	}
 }

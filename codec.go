@@ -5,15 +5,16 @@ import "io"
 // Version defines the ID3 codec version (2.2, 2.3, or 2.4).
 type Version uint8
 
+// Allowed ID3 codec versions
 const (
-	v22 Version = 2 + iota // v2.2
-	v23                    // v2.3
-	v24                    // v2.4
+	V22 Version = 2 + iota // v2.2
+	V23                    // v2.3
+	V24                    // v2.4
 )
 
 type codec interface {
 	HeaderFlags() flagMap
 	DecodeExtendedHeader(t *Tag, r io.Reader) (int, error)
 	DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error)
-	EncodeFrame(t *Tag, f *Frame, w io.Writer) (int, error)
+	EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error)
 }

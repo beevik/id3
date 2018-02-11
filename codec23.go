@@ -23,6 +23,6 @@ func (c *codec23) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	return 0, ErrUnimplemented
 }
 
-func (c *codec23) EncodeFrame(t *Tag, f *Frame, w io.Writer) (int, error) {
+func (c *codec23) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
 	return 0, ErrUnimplemented
 }

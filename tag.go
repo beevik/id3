@@ -34,11 +34,11 @@ const (
 
 func newCodec(v Version) (codec, error) {
 	switch v {
-	case v22:
+	case V22:
 		return newCodec22(), nil
-	case v23:
+	case V23:
 		return newCodec23(), nil
-	case v24:
+	case V24:
 		return newCodec24(), nil
 	default:
 		return nil, ErrInvalidVersion
@@ -169,7 +169,7 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 
 	// Encode the tag's frames into the temporary buffer.
 	for _, f := range t.Frames {
-		_, err := codec.EncodeFrame(t, &f, buf)
+		_, err := codec.EncodeFrame(t, f, buf)
 		if err != nil {
 			return 0, err
 		}
