@@ -725,7 +725,7 @@ func (c *codec24) outputUint8(o *obuf, p property, state *state) {
 		return
 	}
 
-	o.WriteByte(value)
+	o.AddByte(value)
 	if o.err != nil {
 		return
 	}
@@ -752,14 +752,14 @@ func (c *codec24) outputUint16(o *obuf, p property, state *state) {
 			return
 		}
 		if v < 0xff {
-			o.WriteByte(uint8(v))
+			o.AddByte(uint8(v))
 		} else {
-			o.WriteByte(0xff)
-			o.WriteByte(uint8(v - 0xff))
+			o.AddByte(0xff)
+			o.AddByte(uint8(v - 0xff))
 		}
 	default:
 		b := []byte{byte(v >> 8), byte(v)}
-		o.WriteBytes(b)
+		o.AddBytes(b)
 	}
 }
 
@@ -775,7 +775,7 @@ func (c *codec24) outputUint32(o *obuf, p property, state *state) {
 		state.indexedDataLength = v
 	}
 
-	o.WriteBytes(b)
+	o.AddBytes(b)
 }
 
 func (c *codec24) outputUint64(o *obuf, p property, state *state) {
@@ -796,7 +796,7 @@ func (c *codec24) outputUint64(o *obuf, p property, state *state) {
 			b = append(b, 0)
 		}
 		for i := len(b) - 1; i >= 0; i-- {
-			o.WriteByte(b[i])
+			o.AddByte(b[i])
 		}
 	default:
 		panic(errUnknownFieldType)
@@ -823,7 +823,7 @@ func (c *codec24) outputUint32Slice(o *obuf, p property, state *state) {
 			if frac >= (1 << 8) {
 				frac = (1 << 8) - 1
 			}
-			o.WriteByte(byte(frac))
+			o.AddByte(byte(frac))
 		}
 
 	case 16:
@@ -834,7 +834,7 @@ func (c *codec24) outputUint32Slice(o *obuf, p property, state *state) {
 				frac = (1 << 16) - 1
 			}
 			b := []byte{byte(frac >> 8), byte(frac)}
-			o.WriteBytes(b)
+			o.AddBytes(b)
 		}
 
 	default:
@@ -849,7 +849,7 @@ func (c *codec24) outputByteSlice(o *obuf, p property, state *state) {
 
 	var b []byte
 	reflect.ValueOf(&b).Elem().Set(p.value)
-	o.WriteBytes(b)
+	o.AddBytes(b)
 }
 
 func (c *codec24) outputStringSlice(o *obuf, p property, state *state) {
@@ -859,7 +859,7 @@ func (c *codec24) outputStringSlice(o *obuf, p property, state *state) {
 
 	var ss []string
 	reflect.ValueOf(&ss).Elem().Set(p.value)
-	o.err = o.WriteStrings(ss, state.encoding)
+	o.AddStrings(ss, state.encoding)
 }
 
 func (c *codec24) outputStructSlice(o *obuf, p property, state *state, depth int) {
@@ -904,11 +904,11 @@ func (c *codec24) outputString(o *obuf, p property, state *state, depth int) {
 
 	switch p.typ.Name() {
 	case "LanguageString":
-		o.WriteFixedLengthString(v, 3, enc)
+		o.AddFixedLengthString(v, 3, enc)
 	default:
 		// Always terminate strings unless they are the last struct field
 		// of the root level struct.
 		term := depth > 0 || (state.fieldIndex != state.fieldCount-1)
-		o.WriteString(v, enc, term)
+		o.AddString(v, enc, term)
 	}
 }

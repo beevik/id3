@@ -7,7 +7,7 @@ import (
 )
 
 //
-// input
+// ibuf input buffer
 //
 
 type ibuf struct {
@@ -112,7 +112,7 @@ func (i *ibuf) ConsumeAll() []byte {
 }
 
 //
-// output
+// obuf output buffer
 //
 
 type obuf struct {
@@ -137,77 +137,73 @@ func (o *obuf) Bytes() []byte {
 	return o.buf.Bytes()
 }
 
-func (o *obuf) WriteByte(b byte) error {
+func (o *obuf) AddByte(b byte) {
 	if o.err != nil {
-		return o.err
+		return
 	}
 
 	o.err = o.buf.WriteByte(b)
 	if o.err == nil {
 		o.n++
 	}
-	return o.err
 }
 
-func (o *obuf) WriteBytes(b []byte) error {
+func (o *obuf) AddBytes(b []byte) {
 	if o.err != nil {
-		return o.err
+		return
 	}
 
 	n, err := o.buf.Write(b)
 	o.n += n
 	o.err = err
-	return o.err
 }
 
-func (o *obuf) WriteStrings(ss []string, enc Encoding) error {
+func (o *obuf) AddStrings(ss []string, enc Encoding) {
 	if o.err != nil {
-		return o.err
+		return
 	}
 
 	b, err := encodeStrings(ss, enc)
 	if err != nil {
 		o.err = err
-		return o.err
+		return
 	}
 
 	n, err := o.buf.Write(b)
 	o.n += n
 	o.err = err
-	return o.err
 }
 
-func (o *obuf) WriteFixedLengthString(s string, n int, enc Encoding) error {
+func (o *obuf) AddFixedLengthString(s string, n int, enc Encoding) {
 	if o.err != nil {
-		return o.err
+		return
 	}
 
 	if len(s) != n {
 		o.err = ErrInvalidFixedLenString
-		return o.err
+		return
 	}
 
 	b, err := encodeString(s, enc)
 	if err != nil {
 		o.err = err
-		return o.err
+		return
 	}
 
 	n, err = o.buf.Write(b)
 	o.n += n
 	o.err = err
-	return o.err
 }
 
-func (o *obuf) WriteString(s string, enc Encoding, term bool) error {
+func (o *obuf) AddString(s string, enc Encoding, term bool) {
 	if o.err != nil {
-		return o.err
+		return
 	}
 
 	b, err := encodeString(s, enc)
 	if err != nil {
 		o.err = err
-		return o.err
+		return
 	}
 
 	if term {
@@ -217,5 +213,4 @@ func (o *obuf) WriteString(s string, enc Encoding, term bool) error {
 	n, err := o.buf.Write(b)
 	o.n += n
 	o.err = err
-	return o.err
 }
