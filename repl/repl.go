@@ -78,9 +78,9 @@ func main() {
 			case *id3.FramePrivate:
 				fmt.Printf(": %s %v (%d bytes)", f.Owner, f.Data, len(f.Data))
 			case *id3.FramePlayCount:
-				fmt.Printf(": %d", f.Count)
+				fmt.Printf(": %d", f.Counter)
 			case *id3.FramePopularimeter:
-				fmt.Printf(": %s (%d) %d", f.Email, f.Rating, f.Count)
+				fmt.Printf(": %s (%d) %d", f.Email, f.Rating, f.Counter)
 			}
 			fmt.Printf("\n")
 		}

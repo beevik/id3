@@ -1,6 +1,7 @@
 package id3
 
 import (
+	"fmt"
 	"io"
 	"reflect"
 )
@@ -36,10 +37,10 @@ func newCodec24() *codec24 {
 		},
 		bounds: boundsMap{
 			"Encoding":         {0, 3},
-			"GroupSymbol":      {0x80, 0xf0},
+			"GroupID":          {0x80, 0xf0},
+			"LyricContentType": {0, 8},
 			"PictureType":      {0, 20},
 			"TimeStampFormat":  {1, 2},
-			"LyricContentType": {0, 8},
 		},
 		frameTypes: newFrameTypeMap(map[FrameType]string{
 			FrameTypeAttachedPicture:             "APIC",
@@ -123,12 +124,13 @@ func newCodec24() *codec24 {
 type property struct {
 	typ   reflect.Type
 	value reflect.Value
+	name  string
 }
 
 // The state structure keeps track of persistent state required while
 // decoding a single frame.
 type state struct {
-	frameID     FrameID    // current frame ID
+	frameID     string     // current frame ID
 	frameType   FrameType  // current frame type
 	structStack valueStack // stack of active struct values
 	fieldCount  int        // current frame's field count
@@ -232,7 +234,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 
 	// Create the frame header structure.
 	header := FrameHeader{
-		FrameID: FrameID(hd[0:4]),
+		FrameID: string(hd[0:4]),
 		Size:    int(size),
 		Flags:   FrameFlags(flags),
 	}
@@ -265,6 +267,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	p := property{
 		typ:   typ,
 		value: reflect.New(typ),
+		name:  "",
 	}
 	c.scanStruct(buf, p, &state)
 
@@ -293,7 +296,7 @@ func (c *codec24) scanExtraHeaderData(buf *buffer, h *FrameHeader) {
 			buf.err = ErrInvalidFrameHeader
 			return
 		}
-		h.GroupID = GroupSymbol(gid)
+		h.GroupID = gid
 	}
 
 	if (h.Flags & FrameFlagEncrypted) != 0 {
@@ -314,6 +317,8 @@ func (c *codec24) scanExtraHeaderData(buf *buffer, h *FrameHeader) {
 	}
 }
 
+var counter = 0
+
 func (c *codec24) scanStruct(s *buffer, p property, state *state) {
 	if p.typ.Name() == "FrameHeader" {
 		return
@@ -329,11 +334,17 @@ func (c *codec24) scanStruct(s *buffer, p property, state *state) {
 			state.fieldIndex = ii
 		}
 
+		counter++
+		if counter == 58 {
+			foo := 0
+			_ = foo
+		}
 		field := p.typ.Field(ii)
 
 		fp := property{
 			typ:   field.Type,
 			value: p.value.Elem().Field(ii),
+			name:  field.Name,
 		}
 
 		switch field.Type.Kind() {
@@ -388,7 +399,7 @@ func (c *codec24) scanUint8(buf *buffer, p property, state *state) {
 		return
 	}
 
-	bounds, hasBounds := c.bounds[p.typ.Name()]
+	bounds, hasBounds := c.bounds[p.name]
 
 	value := buf.ConsumeByte()
 	if buf.err != nil {
@@ -409,8 +420,8 @@ func (c *codec24) scanUint16(buf *buffer, p property, state *state) {
 	}
 
 	var value uint16
-	switch p.typ.Name() {
-	case "Tempo":
+	switch p.name {
+	case "BPM":
 		value = uint16(buf.ConsumeByte())
 		if value == 0xff {
 			value += uint16(buf.ConsumeByte())
@@ -448,7 +459,7 @@ func (c *codec24) scanUint64(buf *buffer, p property, state *state) {
 	}
 
 	var b []byte
-	switch p.typ.Name() {
+	switch p.name {
 	case "Counter":
 		b = buf.ConsumeAll()
 	default:
@@ -482,7 +493,7 @@ func (c *codec24) scanUint32Slice(buf *buffer, p property, state *state) {
 		return
 	}
 
-	if p.typ.Elem().Name() != "IndexOffset" {
+	if p.name != "IndexOffsets" {
 		panic(errUnknownFieldType)
 	}
 
@@ -490,30 +501,30 @@ func (c *codec24) scanUint32Slice(buf *buffer, p property, state *state) {
 	length := uint32(sf.FieldByName("IndexedDataLength").Uint())
 	bits := uint32(sf.FieldByName("BitsPerIndex").Uint())
 
-	var offsets []IndexOffset
+	var offsets []uint32
 
 	ff := buf.ConsumeAll()
 	switch bits {
 	case 8:
-		offsets = make([]IndexOffset, len(ff))
+		offsets = make([]uint32, len(ff))
 		for _, f := range ff {
 			frac := uint32(f)
 			offset := (frac*length + (1 << 7)) << 8
 			if offset > length {
 				offset = length
 			}
-			offsets = append(offsets, IndexOffset(offset))
+			offsets = append(offsets, offset)
 		}
 
 	case 16:
-		offsets = make([]IndexOffset, len(ff)/2)
+		offsets = make([]uint32, len(ff)/2)
 		for ii := 0; ii < len(ff); ii += 2 {
 			frac := uint32(ff[ii])<<8 | uint32(ff[ii+1])
 			offset := (frac*length + (1 << 15)) << 16
 			if offset > length {
 				offset = length
 			}
-			offsets = append(offsets, IndexOffset(offset))
+			offsets = append(offsets, offset)
 		}
 
 	default:
@@ -544,11 +555,12 @@ func (c *codec24) scanStructSlice(buf *buffer, p property, state *state) {
 	}
 
 	elems := make([]reflect.Value, 0)
-	for buf.Len() > 0 {
+	for i := 0; buf.Len() > 0; i++ {
 		etyp := p.typ.Elem()
 		ep := property{
 			typ:   etyp,
 			value: reflect.New(etyp),
+			name:  fmt.Sprintf("%s[%d]", p.name, i),
 		}
 
 		c.scanStruct(buf, ep, state)
@@ -571,7 +583,7 @@ func (c *codec24) scanString(buf *buffer, p property, state *state) {
 		return
 	}
 
-	if p.typ.Name() == "FrameID" {
+	if p.name == "FrameID" {
 		p.value.SetString(string(state.frameID))
 		return
 	}
@@ -586,8 +598,8 @@ func (c *codec24) scanString(buf *buffer, p property, state *state) {
 	}
 
 	var str string
-	switch p.typ.Name() {
-	case "LanguageString":
+	switch p.name {
+	case "Language":
 		str = buf.ConsumeFixedLengthString(3, EncodingISO88591)
 	default:
 		str = buf.ConsumeNextString(enc)
@@ -606,6 +618,7 @@ func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
 	p := property{
 		typ:   reflect.TypeOf(f).Elem(),
 		value: reflect.ValueOf(f).Elem(),
+		name:  "",
 	}
 	state := state{}
 
@@ -660,6 +673,7 @@ func (c *codec24) outputStruct(buf *buffer, p property, state *state) {
 		fp := property{
 			typ:   field.Type,
 			value: p.value.Field(i),
+			name:  field.Name,
 		}
 
 		switch field.Type.Kind() {
@@ -715,7 +729,7 @@ func (c *codec24) outputUint8(buf *buffer, p property, state *state) {
 		return
 	}
 
-	bounds, hasBounds := c.bounds[p.typ.Name()]
+	bounds, hasBounds := c.bounds[p.name]
 
 	if hasBounds && (value < uint8(bounds.min) || value > uint8(bounds.max)) {
 		buf.err = ErrInvalidFrame
@@ -735,8 +749,8 @@ func (c *codec24) outputUint16(buf *buffer, p property, state *state) {
 
 	v := uint16(p.value.Uint())
 
-	switch p.typ.Name() {
-	case "Tempo":
+	switch p.name {
+	case "BPM":
 		if v > 2*0xff {
 			buf.err = ErrInvalidFrame
 			return
@@ -771,7 +785,7 @@ func (c *codec24) outputUint64(buf *buffer, p property, state *state) {
 
 	v := p.value.Uint()
 
-	switch p.typ.Name() {
+	switch p.name {
 	case "Counter":
 		b := make([]byte, 0, 4)
 		for v != 0 {
@@ -794,7 +808,7 @@ func (c *codec24) outputUint32Slice(buf *buffer, p property, state *state) {
 		return
 	}
 
-	if p.typ.Elem().Name() != "IndexOffset" {
+	if p.name != "IndexOffsets" {
 		panic(errUnknownFieldType)
 	}
 
@@ -869,6 +883,7 @@ func (c *codec24) outputStructSlice(buf *buffer, p property, state *state) {
 		ep := property{
 			typ:   elem.Type(),
 			value: elem,
+			name:  fmt.Sprintf("%s[%d]", p.name, i),
 		}
 
 		c.outputStruct(buf, ep, state)
@@ -885,8 +900,8 @@ func (c *codec24) outputString(buf *buffer, p property, state *state) {
 
 	v := p.value.String()
 
-	if p.typ.Name() == "FrameID" {
-		state.frameID = FrameID(v)
+	if p.name == "FrameID" {
+		state.frameID = v
 		return
 	}
 
@@ -899,8 +914,8 @@ func (c *codec24) outputString(buf *buffer, p property, state *state) {
 		enc = Encoding(sf.FieldByName("Encoding").Uint())
 	}
 
-	switch p.typ.Name() {
-	case "LanguageString":
+	switch p.name {
+	case "Language":
 		buf.AddFixedLengthString(v, 3, enc)
 	default:
 		// Always terminate strings unless they are the last struct field
