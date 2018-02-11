@@ -2,7 +2,6 @@ package id3
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 )
 
@@ -389,14 +388,5 @@ func TestFrame(t *testing.T) {
 	outbuf := b.Bytes()
 	if bytes.Compare(outbuf, inbuf) != 0 {
 		t.Errorf("Tag write error: Different bytes encoded")
-	}
-}
-
-func outputBuf(b []byte) {
-	for i := 0; i < len(b); i += 8 {
-		for j := i; j < i+8 && j < len(b); j++ {
-			fmt.Printf("0x%02x, ", b[j])
-		}
-		fmt.Printf("\n")
 	}
 }

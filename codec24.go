@@ -145,89 +145,89 @@ func (c *codec24) HeaderFlags() flagMap {
 func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 	// Read the first 6 bytes of the extended header so we can see how big
 	// the additional extended data is.
-	var i ibuf
-	if i.Read(r, 6); i.err != nil {
-		return i.n, i.err
+	b := newInputBuf()
+	if b.Read(r, 6); b.err != nil {
+		return b.n, b.err
 	}
 
 	// Read the size of the extended data.
-	size, err := decodeSyncSafeUint32(i.ConsumeBytes(4))
+	size, err := decodeSyncSafeUint32(b.ConsumeBytes(4))
 	if err != nil {
-		return i.n, err
+		return b.n, err
 	}
 
 	// The number of extended flag bytes must be 1.
-	if i.ConsumeByte() != 1 {
-		return i.n, ErrInvalidHeader
+	if b.ConsumeByte() != 1 {
+		return b.n, ErrInvalidHeader
 	}
 
 	// Read the extended flags field.
-	exFlags := i.ConsumeByte()
-	if i.err != nil {
-		return i.n, i.err
+	exFlags := b.ConsumeByte()
+	if b.err != nil {
+		return b.n, b.err
 	}
 
 	// Read the rest of the extended header into the buffer.
-	if i.Read(r, int(size)-6); i.err != nil {
-		return i.n, i.err
+	if b.Read(r, int(size)-6); b.err != nil {
+		return b.n, b.err
 	}
 
 	if (exFlags & (1 << 6)) != 0 {
 		t.Flags |= TagFlagIsUpdate
-		if i.ConsumeByte() != 0 || i.err != nil {
-			return i.n, ErrInvalidHeader
+		if b.ConsumeByte() != 0 || b.err != nil {
+			return b.n, ErrInvalidHeader
 		}
 	}
 
 	if (exFlags & (1 << 5)) != 0 {
 		t.Flags |= TagFlagHasCRC
-		data := i.ConsumeBytes(6)
-		if i.err != nil || data[0] != 5 {
-			return i.n, ErrInvalidHeader
+		data := b.ConsumeBytes(6)
+		if b.err != nil || data[0] != 5 {
+			return b.n, ErrInvalidHeader
 		}
 		t.CRC, err = decodeSyncSafeUint32(data[1:])
 		if err != nil {
-			return i.n, ErrInvalidHeader
+			return b.n, ErrInvalidHeader
 		}
 	}
 
 	if (exFlags & (1 << 4)) != 0 {
 		t.Flags |= TagFlagHasRestrictions
-		data := i.ConsumeBytes(2)
-		if i.err != nil || data[0] != 1 {
-			return i.n, ErrInvalidHeader
+		data := b.ConsumeBytes(2)
+		if b.err != nil || data[0] != 1 {
+			return b.n, ErrInvalidHeader
 		}
 		t.Restrictions = uint16(data[0])<<8 | uint16(data[1])
 	}
 
-	return i.n, i.err
+	return b.n, b.err
 }
 
 func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
-	// Read the first four bytes of the frame header data to see if it'i
+	// Read the first four bytes of the frame header data to see if it's
 	// padding.
-	var i ibuf
-	if i.Read(r, 4); i.err != nil {
-		return i.n, i.err
+	b := newInputBuf()
+	if b.Read(r, 4); b.err != nil {
+		return b.n, b.err
 	}
-	hd := i.ConsumeAll()
+	hd := b.ConsumeAll()
 	if hd[0] == 0 && hd[1] == 0 && hd[2] == 0 && hd[3] == 0 {
-		return i.n, errPaddingEncountered
+		return b.n, errPaddingEncountered
 	}
 
 	// Read the remaining 6 bytes of the header data.
-	if i.Read(r, 6); i.err != nil {
-		return i.n, i.err
+	if b.Read(r, 6); b.err != nil {
+		return b.n, b.err
 	}
-	hd = append(hd, i.ConsumeAll()...)
+	hd = append(hd, b.ConsumeAll()...)
 
 	// Decode the frame's payload size.
 	size, err := decodeSyncSafeUint32(hd[4:8])
 	if err != nil {
-		return i.n, err
+		return b.n, err
 	}
 	if size < 1 {
-		return i.n, ErrInvalidFrameHeader
+		return b.n, ErrInvalidFrameHeader
 	}
 
 	// Decode the frame flags.
@@ -241,20 +241,20 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	}
 
 	// Read the rest of the frame into the input buffer.
-	if i.Read(r, header.Size); i.err != nil {
-		return i.n, i.err
+	if b.Read(r, header.Size); b.err != nil {
+		return b.n, b.err
 	}
 
 	// Strip unsync codes if the frame is unsynchronized but the tag isn't.
 	if (header.Flags&FrameFlagUnsynchronized) != 0 && (t.Flags&TagFlagUnsync) == 0 {
-		i.Replace(removeUnsyncCodes(i.buf))
+		b.Replace(removeUnsyncCodes(b.buf))
 	}
 
 	// Scan extra header data indicated by the flags.
 	if header.Flags != 0 {
-		c.scanExtraHeaderData(&i, &header)
-		if i.err != nil {
-			return i.n, i.err
+		c.scanExtraHeaderData(b, &header)
+		if b.err != nil {
+			return b.n, b.err
 		}
 	}
 
@@ -270,10 +270,10 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 		typ:   typ,
 		value: reflect.New(typ),
 	}
-	c.scanStruct(&i, p, &state, 0)
+	c.scanStruct(b, p, &state, 0)
 
 	// Return the interpreted frame and header.
-	if i.err == nil {
+	if b.err == nil {
 		*f = p.value.Interface().(Frame)
 
 		// The frame's first field is always the header. Copy into it.
@@ -281,44 +281,44 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 		ht.Field(0).Set(reflect.ValueOf(header))
 	}
 
-	return i.n, i.err
+	return b.n, b.err
 }
 
-func (c *codec24) scanExtraHeaderData(i *ibuf, h *FrameHeader) {
+func (c *codec24) scanExtraHeaderData(b *inputBuf, h *FrameHeader) {
 	// If the frame is compressed, it must include a data length indicator.
 	if (h.Flags&FrameFlagCompressed) != 0 && (h.Flags&FrameFlagHasDataLength) == 0 {
-		i.err = ErrInvalidFrameFlags
+		b.err = ErrInvalidFrameFlags
 		return
 	}
 
 	if (h.Flags & FrameFlagHasGroupInfo) != 0 {
-		gid := i.ConsumeByte()
-		if i.err != nil || gid < 0x80 || gid > 0xf0 {
-			i.err = ErrInvalidFrameHeader
+		gid := b.ConsumeByte()
+		if b.err != nil || gid < 0x80 || gid > 0xf0 {
+			b.err = ErrInvalidFrameHeader
 			return
 		}
 		h.GroupID = GroupSymbol(gid)
 	}
 
 	if (h.Flags & FrameFlagEncrypted) != 0 {
-		em := i.ConsumeByte()
-		if i.err != nil || em < 0x80 || em > 0xf0 {
-			i.err = ErrInvalidFrameHeader
+		em := b.ConsumeByte()
+		if b.err != nil || em < 0x80 || em > 0xf0 {
+			b.err = ErrInvalidFrameHeader
 			return
 		}
 		h.EncryptMethod = em
 	}
 
 	if (h.Flags & FrameFlagHasDataLength) != 0 {
-		b := i.ConsumeBytes(4)
-		if i.err != nil {
-			i.err = ErrInvalidFrameHeader
+		bb := b.ConsumeBytes(4)
+		if b.err != nil {
+			b.err = ErrInvalidFrameHeader
 		}
-		h.DataLength, i.err = decodeSyncSafeUint32(b)
+		h.DataLength, b.err = decodeSyncSafeUint32(bb)
 	}
 }
 
-func (c *codec24) scanStruct(s *ibuf, p property, state *state, depth int) {
+func (c *codec24) scanStruct(s *inputBuf, p property, state *state, depth int) {
 	if p.typ.Name() == "FrameHeader" {
 		return
 	}
@@ -379,8 +379,8 @@ func (c *codec24) scanStruct(s *ibuf, p property, state *state, depth int) {
 	}
 }
 
-func (c *codec24) scanUint8(i *ibuf, p property, state *state) {
-	if i.err != nil {
+func (c *codec24) scanUint8(b *inputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
@@ -390,15 +390,15 @@ func (c *codec24) scanUint8(i *ibuf, p property, state *state) {
 		return
 	}
 
-	b, hasBounds := c.bounds[p.typ.Name()]
+	bounds, hasBounds := c.bounds[p.typ.Name()]
 
-	value := i.ConsumeByte()
-	if i.err != nil {
+	value := b.ConsumeByte()
+	if b.err != nil {
 		return
 	}
 
-	if hasBounds && (value < uint8(b.min) || value > uint8(b.max)) {
-		i.err = ErrInvalidFrame
+	if hasBounds && (value < uint8(bounds.min) || value > uint8(bounds.max)) {
+		b.err = ErrInvalidFrame
 		return
 	}
 
@@ -412,40 +412,40 @@ func (c *codec24) scanUint8(i *ibuf, p property, state *state) {
 	p.value.SetUint(uint64(value))
 }
 
-func (c *codec24) scanUint16(i *ibuf, p property, state *state) {
-	if i.err != nil {
+func (c *codec24) scanUint16(b *inputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
 	var value uint16
 	switch p.typ.Name() {
 	case "Tempo":
-		value = uint16(i.ConsumeByte())
+		value = uint16(b.ConsumeByte())
 		if value == 0xff {
-			value += uint16(i.ConsumeByte())
+			value += uint16(b.ConsumeByte())
 		}
 	default:
-		b := i.ConsumeBytes(2)
-		value = uint16(b[0])<<8 | uint16(b[1])
+		bb := b.ConsumeBytes(2)
+		value = uint16(bb[0])<<8 | uint16(bb[1])
 	}
 
-	if i.err != nil {
+	if b.err != nil {
 		return
 	}
 
 	p.value.SetUint(uint64(value))
 }
 
-func (c *codec24) scanUint32(i *ibuf, p property, state *state) {
-	if i.err != nil {
+func (c *codec24) scanUint32(b *inputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
-	buf := i.ConsumeBytes(4)
+	buf := b.ConsumeBytes(4)
 
 	var value uint64
-	for _, b := range buf {
-		value = (value << 8) | uint64(b)
+	for _, bb := range buf {
+		value = (value << 8) | uint64(bb)
 	}
 
 	if state.frameType == FrameTypeAudioSeekPointIndex && p.name == "IndexedDataLength" {
@@ -455,43 +455,43 @@ func (c *codec24) scanUint32(i *ibuf, p property, state *state) {
 	p.value.SetUint(value)
 }
 
-func (c *codec24) scanUint64(i *ibuf, p property, state *state) {
-	if i.err != nil {
+func (c *codec24) scanUint64(b *inputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
 	var buf []byte
 	switch p.typ.Name() {
 	case "Counter":
-		buf = i.ConsumeAll()
+		buf = b.ConsumeAll()
 	default:
 		panic(errUnknownFieldType)
 	}
 
-	if i.err != nil {
-		i.err = ErrInvalidFrame
+	if b.err != nil {
+		b.err = ErrInvalidFrame
 		return
 	}
 
 	var value uint64
-	for _, b := range buf {
-		value = (value << 8) | uint64(b)
+	for _, bb := range buf {
+		value = (value << 8) | uint64(bb)
 	}
 
 	p.value.SetUint(value)
 }
 
-func (c *codec24) scanByteSlice(i *ibuf, p property, state *state) {
-	if i.err != nil {
+func (c *codec24) scanByteSlice(b *inputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
-	b := i.ConsumeAll()
-	p.value.Set(reflect.ValueOf(b))
+	bb := b.ConsumeAll()
+	p.value.Set(reflect.ValueOf(bb))
 }
 
-func (c *codec24) scanUint32Slice(i *ibuf, p property, state *state) {
-	if i.err != nil {
+func (c *codec24) scanUint32Slice(b *inputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
@@ -501,12 +501,12 @@ func (c *codec24) scanUint32Slice(i *ibuf, p property, state *state) {
 
 	var offsets []IndexOffset
 
-	ff := i.ConsumeAll()
+	ff := b.ConsumeAll()
 	switch state.bits {
 	case 8:
 		offsets = make([]IndexOffset, len(ff))
-		for _, b := range ff {
-			frac := uint32(b)
+		for _, f := range ff {
+			frac := uint32(f)
 			offset := (frac*state.indexedDataLength + (1 << 7)) << 8
 			if offset > state.indexedDataLength {
 				offset = state.indexedDataLength
@@ -526,40 +526,40 @@ func (c *codec24) scanUint32Slice(i *ibuf, p property, state *state) {
 		}
 
 	default:
-		i.err = ErrInvalidFrame
+		b.err = ErrInvalidFrame
 		return
 	}
 
 	p.value.Set(reflect.ValueOf(offsets))
 }
 
-func (c *codec24) scanStringSlice(i *ibuf, p property, state *state) {
-	if i.err != nil {
+func (c *codec24) scanStringSlice(b *inputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
-	ss := i.ConsumeStrings(state.encoding)
-	if i.err != nil {
+	ss := b.ConsumeStrings(state.encoding)
+	if b.err != nil {
 		return
 	}
 	p.value.Set(reflect.ValueOf(ss))
 }
 
-func (c *codec24) scanStructSlice(i *ibuf, p property, state *state, depth int) {
-	if i.err != nil {
+func (c *codec24) scanStructSlice(b *inputBuf, p property, state *state, depth int) {
+	if b.err != nil {
 		return
 	}
 
 	elems := make([]reflect.Value, 0)
-	for i.Len() > 0 {
+	for b.Len() > 0 {
 		etyp := p.typ.Elem()
 		ep := property{
 			typ:   etyp,
 			value: reflect.New(etyp),
 		}
 
-		c.scanStruct(i, ep, state, depth+1)
-		if i.err != nil {
+		c.scanStruct(b, ep, state, depth+1)
+		if b.err != nil {
 			return
 		}
 
@@ -573,8 +573,8 @@ func (c *codec24) scanStructSlice(i *ibuf, p property, state *state, depth int) 
 	p.value.Set(slice)
 }
 
-func (c *codec24) scanString(i *ibuf, p property, state *state) {
-	if i.err != nil {
+func (c *codec24) scanString(b *inputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
@@ -591,12 +591,12 @@ func (c *codec24) scanString(i *ibuf, p property, state *state) {
 	var str string
 	switch p.typ.Name() {
 	case "LanguageString":
-		str = i.ConsumeFixedLengthString(3, EncodingISO88591)
+		str = b.ConsumeFixedLengthString(3, EncodingISO88591)
 	default:
-		str = i.ConsumeNextString(enc)
+		str = b.ConsumeNextString(enc)
 	}
 
-	if i.err != nil {
+	if b.err != nil {
 		return
 	}
 
@@ -604,7 +604,7 @@ func (c *codec24) scanString(i *ibuf, p property, state *state) {
 }
 
 func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
-	o := newOutput()
+	b := newOutputBuf()
 
 	p := property{
 		typ:   reflect.TypeOf(f).Elem(),
@@ -614,14 +614,14 @@ func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
 		encoding: EncodingISO88591,
 	}
 
-	c.outputStruct(o, p, &state, 0)
-	if o.err != nil {
-		return o.n, o.err
+	c.outputStruct(b, p, &state, 0)
+	if b.err != nil {
+		return b.n, b.err
 	}
 
 	h := HeaderOf(f)
 	h.FrameID = c.frameTypes.LookupFrameID(state.frameType)
-	h.Size = o.Len()
+	h.Size = b.Len()
 
 	hdr := make([]byte, 10)
 
@@ -640,12 +640,12 @@ func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
 		return n, err
 	}
 
-	nn, err := w.Write(o.Bytes())
+	nn, err := w.Write(b.Bytes())
 	n += nn
 	return n, err
 }
 
-func (c *codec24) outputStruct(o *obuf, p property, state *state, depth int) {
+func (c *codec24) outputStruct(b *outputBuf, p property, state *state, depth int) {
 	if p.typ.Name() == "FrameHeader" {
 		return
 	}
@@ -669,36 +669,36 @@ func (c *codec24) outputStruct(o *obuf, p property, state *state, depth int) {
 
 		switch field.Type.Kind() {
 		case reflect.Uint8:
-			c.outputUint8(o, fp, state)
+			c.outputUint8(b, fp, state)
 
 		case reflect.Uint16:
-			c.outputUint16(o, fp, state)
+			c.outputUint16(b, fp, state)
 
 		case reflect.Uint32:
-			c.outputUint32(o, fp, state)
+			c.outputUint32(b, fp, state)
 
 		case reflect.Uint64:
-			c.outputUint64(o, fp, state)
+			c.outputUint64(b, fp, state)
 
 		case reflect.Slice:
 			switch field.Type.Elem().Kind() {
 			case reflect.Uint8:
-				c.outputByteSlice(o, fp, state)
+				c.outputByteSlice(b, fp, state)
 			case reflect.Uint32:
-				c.outputUint32Slice(o, fp, state)
+				c.outputUint32Slice(b, fp, state)
 			case reflect.String:
-				c.outputStringSlice(o, fp, state)
+				c.outputStringSlice(b, fp, state)
 			case reflect.Struct:
-				c.outputStructSlice(o, fp, state, depth+1)
+				c.outputStructSlice(b, fp, state, depth+1)
 			default:
 				panic(errUnknownFieldType)
 			}
 
 		case reflect.String:
-			c.outputString(o, fp, state, depth)
+			c.outputString(b, fp, state, depth)
 
 		case reflect.Struct:
-			c.outputStruct(o, fp, state, depth+1)
+			c.outputStruct(b, fp, state, depth+1)
 
 		default:
 			panic(errUnknownFieldType)
@@ -706,8 +706,8 @@ func (c *codec24) outputStruct(o *obuf, p property, state *state, depth int) {
 	}
 }
 
-func (c *codec24) outputUint8(o *obuf, p property, state *state) {
-	if o.err != nil {
+func (c *codec24) outputUint8(b *outputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
@@ -718,15 +718,15 @@ func (c *codec24) outputUint8(o *obuf, p property, state *state) {
 		return
 	}
 
-	b, hasBounds := c.bounds[p.typ.Name()]
+	bounds, hasBounds := c.bounds[p.typ.Name()]
 
-	if hasBounds && (value < uint8(b.min) || value > uint8(b.max)) {
-		o.err = ErrInvalidFrame
+	if hasBounds && (value < uint8(bounds.min) || value > uint8(bounds.max)) {
+		b.err = ErrInvalidFrame
 		return
 	}
 
-	o.AddByte(value)
-	if o.err != nil {
+	b.AddByte(value)
+	if b.err != nil {
 		return
 	}
 
@@ -738,8 +738,8 @@ func (c *codec24) outputUint8(o *obuf, p property, state *state) {
 	}
 }
 
-func (c *codec24) outputUint16(o *obuf, p property, state *state) {
-	if o.err != nil {
+func (c *codec24) outputUint16(b *outputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
@@ -748,38 +748,38 @@ func (c *codec24) outputUint16(o *obuf, p property, state *state) {
 	switch p.typ.Name() {
 	case "Tempo":
 		if v > 2*0xff {
-			o.err = ErrInvalidFrame
+			b.err = ErrInvalidFrame
 			return
 		}
 		if v < 0xff {
-			o.AddByte(uint8(v))
+			b.AddByte(uint8(v))
 		} else {
-			o.AddByte(0xff)
-			o.AddByte(uint8(v - 0xff))
+			b.AddByte(0xff)
+			b.AddByte(uint8(v - 0xff))
 		}
 	default:
-		b := []byte{byte(v >> 8), byte(v)}
-		o.AddBytes(b)
+		bb := []byte{byte(v >> 8), byte(v)}
+		b.AddBytes(bb)
 	}
 }
 
-func (c *codec24) outputUint32(o *obuf, p property, state *state) {
-	if o.err != nil {
+func (c *codec24) outputUint32(b *outputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
 	v := uint32(p.value.Uint())
-	b := []byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)}
+	bb := []byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)}
 
 	if state.frameType == FrameTypeAudioSeekPointIndex && p.name == "IndexedDataLength" {
 		state.indexedDataLength = v
 	}
 
-	o.AddBytes(b)
+	b.AddBytes(bb)
 }
 
-func (c *codec24) outputUint64(o *obuf, p property, state *state) {
-	if o.err != nil {
+func (c *codec24) outputUint64(b *outputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
@@ -787,24 +787,24 @@ func (c *codec24) outputUint64(o *obuf, p property, state *state) {
 
 	switch p.typ.Name() {
 	case "Counter":
-		b := make([]byte, 0, 4)
+		bb := make([]byte, 0, 4)
 		for v != 0 {
-			b = append(b, byte(v&0xff))
+			bb = append(bb, byte(v&0xff))
 			v = v >> 8
 		}
-		for len(b) < 4 {
-			b = append(b, 0)
+		for len(bb) < 4 {
+			bb = append(bb, 0)
 		}
-		for i := len(b) - 1; i >= 0; i-- {
-			o.AddByte(b[i])
+		for i := len(bb) - 1; i >= 0; i-- {
+			b.AddByte(bb[i])
 		}
 	default:
 		panic(errUnknownFieldType)
 	}
 }
 
-func (c *codec24) outputUint32Slice(o *obuf, p property, state *state) {
-	if o.err != nil {
+func (c *codec24) outputUint32Slice(b *outputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
@@ -823,7 +823,7 @@ func (c *codec24) outputUint32Slice(o *obuf, p property, state *state) {
 			if frac >= (1 << 8) {
 				frac = (1 << 8) - 1
 			}
-			o.AddByte(byte(frac))
+			b.AddByte(byte(frac))
 		}
 
 	case 16:
@@ -833,37 +833,37 @@ func (c *codec24) outputUint32Slice(o *obuf, p property, state *state) {
 			if frac >= (1 << 16) {
 				frac = (1 << 16) - 1
 			}
-			b := []byte{byte(frac >> 8), byte(frac)}
-			o.AddBytes(b)
+			bb := []byte{byte(frac >> 8), byte(frac)}
+			b.AddBytes(bb)
 		}
 
 	default:
-		o.err = ErrInvalidFrame
+		b.err = ErrInvalidFrame
 	}
 }
 
-func (c *codec24) outputByteSlice(o *obuf, p property, state *state) {
-	if o.err != nil {
+func (c *codec24) outputByteSlice(b *outputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
-	var b []byte
-	reflect.ValueOf(&b).Elem().Set(p.value)
-	o.AddBytes(b)
+	var bb []byte
+	reflect.ValueOf(&bb).Elem().Set(p.value)
+	b.AddBytes(bb)
 }
 
-func (c *codec24) outputStringSlice(o *obuf, p property, state *state) {
-	if o.err != nil {
+func (c *codec24) outputStringSlice(b *outputBuf, p property, state *state) {
+	if b.err != nil {
 		return
 	}
 
 	var ss []string
 	reflect.ValueOf(&ss).Elem().Set(p.value)
-	o.AddStrings(ss, state.encoding)
+	b.AddStrings(ss, state.encoding)
 }
 
-func (c *codec24) outputStructSlice(o *obuf, p property, state *state, depth int) {
-	if o.err != nil {
+func (c *codec24) outputStructSlice(b *outputBuf, p property, state *state, depth int) {
+	if b.err != nil {
 		return
 	}
 
@@ -878,15 +878,15 @@ func (c *codec24) outputStructSlice(o *obuf, p property, state *state, depth int
 			value: elem,
 		}
 
-		c.outputStruct(o, ep, state, depth+1)
-		if o.err != nil {
+		c.outputStruct(b, ep, state, depth+1)
+		if b.err != nil {
 			return
 		}
 	}
 }
 
-func (c *codec24) outputString(o *obuf, p property, state *state, depth int) {
-	if o.err != nil {
+func (c *codec24) outputString(b *outputBuf, p property, state *state, depth int) {
+	if b.err != nil {
 		return
 	}
 
@@ -904,11 +904,11 @@ func (c *codec24) outputString(o *obuf, p property, state *state, depth int) {
 
 	switch p.typ.Name() {
 	case "LanguageString":
-		o.AddFixedLengthString(v, 3, enc)
+		b.AddFixedLengthString(v, 3, enc)
 	default:
 		// Always terminate strings unless they are the last struct field
 		// of the root level struct.
 		term := depth > 0 || (state.fieldIndex != state.fieldCount-1)
-		o.AddString(v, enc, term)
+		b.AddString(v, enc, term)
 	}
 }

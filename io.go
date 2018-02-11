@@ -7,30 +7,34 @@ import (
 )
 
 //
-// ibuf input buffer
+// inputBuf
 //
 
-type ibuf struct {
+type inputBuf struct {
 	buf []byte
 	n   int
 	err error
 }
 
-func (i *ibuf) Len() int {
+func newInputBuf() *inputBuf {
+	return &inputBuf{}
+}
+
+func (i *inputBuf) Len() int {
 	return len(i.buf)
 }
 
-func (i *ibuf) Read(r io.Reader, n int) {
+func (i *inputBuf) Read(r io.Reader, n int) {
 	i.buf = make([]byte, n)
 	_, i.err = io.ReadFull(r, i.buf)
 	i.n += n
 }
 
-func (i *ibuf) Replace(buf []byte) {
+func (i *inputBuf) Replace(buf []byte) {
 	i.buf = buf
 }
 
-func (i *ibuf) ConsumeByte() byte {
+func (i *inputBuf) ConsumeByte() byte {
 	if i.err != nil {
 		return 0
 	}
@@ -45,7 +49,7 @@ func (i *ibuf) ConsumeByte() byte {
 	return b
 }
 
-func (i *ibuf) ConsumeBytes(n int) []byte {
+func (i *inputBuf) ConsumeBytes(n int) []byte {
 	if i.err != nil {
 		return make([]byte, n)
 	}
@@ -60,7 +64,7 @@ func (i *ibuf) ConsumeBytes(n int) []byte {
 	return b
 }
 
-func (i *ibuf) ConsumeStrings(enc Encoding) []string {
+func (i *inputBuf) ConsumeStrings(enc Encoding) []string {
 	if i.err != nil {
 		return []string{}
 	}
@@ -75,7 +79,7 @@ func (i *ibuf) ConsumeStrings(enc Encoding) []string {
 	return ss
 }
 
-func (i *ibuf) ConsumeFixedLengthString(len int, enc Encoding) string {
+func (i *inputBuf) ConsumeFixedLengthString(len int, enc Encoding) string {
 	if i.err != nil {
 		return strings.Repeat("_", len)
 	}
@@ -90,7 +94,7 @@ func (i *ibuf) ConsumeFixedLengthString(len int, enc Encoding) string {
 	return str
 }
 
-func (i *ibuf) ConsumeNextString(enc Encoding) string {
+func (i *inputBuf) ConsumeNextString(enc Encoding) string {
 	var str string
 
 	if i.err != nil {
@@ -101,7 +105,7 @@ func (i *ibuf) ConsumeNextString(enc Encoding) string {
 	return str
 }
 
-func (i *ibuf) ConsumeAll() []byte {
+func (i *inputBuf) ConsumeAll() []byte {
 	if i.err != nil {
 		return []byte{}
 	}
@@ -112,32 +116,32 @@ func (i *ibuf) ConsumeAll() []byte {
 }
 
 //
-// obuf output buffer
+// outputBuf
 //
 
-type obuf struct {
+type outputBuf struct {
 	buf *bytes.Buffer
 	n   int
 	err error
 }
 
-func newOutput() *obuf {
-	return &obuf{
+func newOutputBuf() *outputBuf {
+	return &outputBuf{
 		buf: bytes.NewBuffer([]byte{}),
 		n:   0,
 		err: nil,
 	}
 }
 
-func (o *obuf) Len() int {
+func (o *outputBuf) Len() int {
 	return len(o.buf.Bytes())
 }
 
-func (o *obuf) Bytes() []byte {
+func (o *outputBuf) Bytes() []byte {
 	return o.buf.Bytes()
 }
 
-func (o *obuf) AddByte(b byte) {
+func (o *outputBuf) AddByte(b byte) {
 	if o.err != nil {
 		return
 	}
@@ -148,7 +152,7 @@ func (o *obuf) AddByte(b byte) {
 	}
 }
 
-func (o *obuf) AddBytes(b []byte) {
+func (o *outputBuf) AddBytes(b []byte) {
 	if o.err != nil {
 		return
 	}
@@ -158,7 +162,7 @@ func (o *obuf) AddBytes(b []byte) {
 	o.err = err
 }
 
-func (o *obuf) AddStrings(ss []string, enc Encoding) {
+func (o *outputBuf) AddStrings(ss []string, enc Encoding) {
 	if o.err != nil {
 		return
 	}
@@ -174,7 +178,7 @@ func (o *obuf) AddStrings(ss []string, enc Encoding) {
 	o.err = err
 }
 
-func (o *obuf) AddFixedLengthString(s string, n int, enc Encoding) {
+func (o *outputBuf) AddFixedLengthString(s string, n int, enc Encoding) {
 	if o.err != nil {
 		return
 	}
@@ -195,7 +199,7 @@ func (o *obuf) AddFixedLengthString(s string, n int, enc Encoding) {
 	o.err = err
 }
 
-func (o *obuf) AddString(s string, enc Encoding, term bool) {
+func (o *outputBuf) AddString(s string, enc Encoding, term bool) {
 	if o.err != nil {
 		return
 	}
