@@ -114,10 +114,11 @@ func writeTag() {
 	tag.Frames = append(tag.Frames, priv)
 
 	sp := id3.NewFrameAudioSeekPointIndex(0, 1000)
-	sp.AddIndex(0.1134)
-	sp.AddIndex(0.0034)
-	sp.AddIndex(0.928)
-	sp.AddIndex(0.5)
+	sp.AddIndexOffset(100)
+	sp.AddIndexOffset(2)
+	sp.AddIndexOffset(951)
+	sp.AddIndexOffset(800)
+	sp.AddIndexOffset(400)
 
 	tag.Frames = append(tag.Frames, sp)
 

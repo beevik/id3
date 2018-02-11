@@ -259,9 +259,10 @@ func NewFrameAudioEncryption(owner string, previewStart, previewLength uint16, d
 	}
 }
 
-// A Fraction represents a value between 0 and 1, indicating a distance
-// from the start of the indexed audio data to the index in question.
-type Fraction float32
+// An IndexOffset represents an offset from the FrameAudioSeekPointIndex
+// frame's IndexedDataStart value. It must be less than the frame's
+// IndexedDataLength value.
+type IndexOffset uint32
 
 // The Bits type is used to store the number of bits per index (8 or 16).
 type Bits uint8
@@ -275,7 +276,7 @@ type FrameAudioSeekPointIndex struct {
 	IndexedDataLength uint32
 	IndexPoints       uint16
 	BitsPerIndex      Bits
-	Indexes           []Fraction
+	IndexOffsets      []IndexOffset
 }
 
 // NewFrameAudioSeekPointIndex creates a new audio seek point index frame.
@@ -286,28 +287,28 @@ func NewFrameAudioSeekPointIndex(indexedDataStart, indexedDataLength uint32) *Fr
 		IndexedDataLength: indexedDataLength,
 		IndexPoints:       0,
 		BitsPerIndex:      16,
-		Indexes:           []Fraction{},
+		IndexOffsets:      []IndexOffset{},
 	}
 }
 
-// AddIndex inserts a new index into the audio seek point index frame. The
-// fraction is relative to the indexed data start and length values associated
-// with the frame and must be between 0 and 1.
-func (f *FrameAudioSeekPointIndex) AddIndex(fraction float32) {
+// AddIndexOffset inserts a new index offset into the audio seek point index
+// frame. The offset is relative to the frame's IndexedDataStart value and
+// must be less than the frame's IndexedDataLength field.
+func (f *FrameAudioSeekPointIndex) AddIndexOffset(o uint32) {
 	var i int
-	for i = 0; i < len(f.Indexes); i++ {
-		if f.Indexes[i] > Fraction(fraction) {
+	for i = 0; i < len(f.IndexOffsets); i++ {
+		if f.IndexOffsets[i] > IndexOffset(o) {
 			break
 		}
 	}
 
 	switch {
-	case i == len(f.Indexes):
-		f.Indexes = append(f.Indexes, Fraction(fraction))
+	case i == len(f.IndexOffsets):
+		f.IndexOffsets = append(f.IndexOffsets, IndexOffset(o))
 	default:
-		f.Indexes = append(f.Indexes, 0)
-		copy(f.Indexes[i+1:], f.Indexes[i:])
-		f.Indexes[i] = Fraction(fraction)
+		f.IndexOffsets = append(f.IndexOffsets, 0)
+		copy(f.IndexOffsets[i+1:], f.IndexOffsets[i:])
+		f.IndexOffsets[i] = IndexOffset(o)
 	}
 
 	f.IndexPoints++

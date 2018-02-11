@@ -122,18 +122,20 @@ func newCodec24() *codec24 {
 // value. Usually the property is a struct field.
 type property struct {
 	typ   reflect.Type
+	name  string // field name if the property is a struct field
 	value reflect.Value
 }
 
 // The state structure keeps track of persistent state required while
 // decoding a single frame.
 type state struct {
-	frameID    FrameID
-	frameType  FrameType
-	encoding   Encoding // used by text frames
-	bits       uint8    // used by ASPI frame
-	fieldCount int      // number of fields in the frame payload struct
-	fieldIndex int      // current field in the frame payload struct
+	frameID           FrameID
+	frameType         FrameType
+	encoding          Encoding // used by text frames
+	bits              uint8    // used by ASPI frame
+	fieldCount        int      // number of fields in the frame payload struct
+	fieldIndex        int      // current field in the frame payload struct
+	indexedDataLength uint32   // used for ASPI frames
 }
 
 func (c *codec24) HeaderFlags() flagMap {
@@ -334,6 +336,7 @@ func (c *codec24) scanStruct(s *ibuf, p property, state *state, depth int) {
 
 		fp := property{
 			typ:   field.Type,
+			name:  field.Name,
 			value: p.value.Elem().Field(ii),
 		}
 
@@ -354,8 +357,8 @@ func (c *codec24) scanStruct(s *ibuf, p property, state *state, depth int) {
 			switch field.Type.Elem().Kind() {
 			case reflect.Uint8:
 				c.scanByteSlice(s, fp, state)
-			case reflect.Float32:
-				c.scanFloat32Slice(s, fp, state)
+			case reflect.Uint32:
+				c.scanUint32Slice(s, fp, state)
 			case reflect.String:
 				c.scanStringSlice(s, fp, state)
 			case reflect.Struct:
@@ -445,6 +448,10 @@ func (c *codec24) scanUint32(i *ibuf, p property, state *state) {
 		value = (value << 8) | uint64(b)
 	}
 
+	if state.frameType == FrameTypeAudioSeekPointIndex && p.name == "IndexedDataLength" {
+		state.indexedDataLength = uint32(value)
+	}
+
 	p.value.SetUint(value)
 }
 
@@ -483,39 +490,47 @@ func (c *codec24) scanByteSlice(i *ibuf, p property, state *state) {
 	p.value.Set(reflect.ValueOf(b))
 }
 
-func (c *codec24) scanFloat32Slice(i *ibuf, p property, state *state) {
+func (c *codec24) scanUint32Slice(i *ibuf, p property, state *state) {
 	if i.err != nil {
 		return
 	}
 
-	if p.typ.Elem().Name() != "Fraction" {
+	if p.typ.Elem().Name() != "IndexOffset" {
 		panic(errUnknownFieldType)
 	}
 
-	if state.bits != 8 && state.bits != 16 {
-		i.err = ErrInvalidFrame
-		return
-	}
-
-	var indexes []Fraction
+	var offsets []IndexOffset
 
 	ff := i.ConsumeAll()
 	switch state.bits {
 	case 8:
-		indexes = make([]Fraction, len(ff))
+		offsets = make([]IndexOffset, len(ff))
 		for _, b := range ff {
-			v := uint32(b)
-			indexes = append(indexes, Fraction(v)/Fraction(1<<8))
+			frac := uint32(b)
+			offset := (frac*state.indexedDataLength + (1 << 7)) << 8
+			if offset > state.indexedDataLength {
+				offset = state.indexedDataLength
+			}
+			offsets = append(offsets, IndexOffset(offset))
 		}
+
 	case 16:
-		indexes = make([]Fraction, len(ff)/2)
+		offsets = make([]IndexOffset, len(ff)/2)
 		for ii := 0; ii < len(ff); ii += 2 {
-			v := uint32(ff[ii])<<8 | uint32(ff[ii])
-			indexes = append(indexes, Fraction(v)/Fraction(1<<16))
+			frac := uint32(ff[ii])<<8 | uint32(ff[ii+1])
+			offset := (frac*state.indexedDataLength + (1 << 15)) << 16
+			if offset > state.indexedDataLength {
+				offset = state.indexedDataLength
+			}
+			offsets = append(offsets, IndexOffset(offset))
 		}
+
+	default:
+		i.err = ErrInvalidFrame
+		return
 	}
 
-	p.value.Set(reflect.ValueOf(indexes))
+	p.value.Set(reflect.ValueOf(offsets))
 }
 
 func (c *codec24) scanStringSlice(i *ibuf, p property, state *state) {
@@ -648,6 +663,7 @@ func (c *codec24) outputStruct(o *obuf, p property, state *state, depth int) {
 
 		fp := property{
 			typ:   field.Type,
+			name:  field.Name,
 			value: p.value.Field(i),
 		}
 
@@ -668,8 +684,8 @@ func (c *codec24) outputStruct(o *obuf, p property, state *state, depth int) {
 			switch field.Type.Elem().Kind() {
 			case reflect.Uint8:
 				c.outputByteSlice(o, fp, state)
-			case reflect.Float32:
-				c.outputFloat32Slice(o, fp, state)
+			case reflect.Uint32:
+				c.outputUint32Slice(o, fp, state)
 			case reflect.String:
 				c.outputStringSlice(o, fp, state)
 			case reflect.Struct:
@@ -754,6 +770,11 @@ func (c *codec24) outputUint32(o *obuf, p property, state *state) {
 
 	v := uint32(p.value.Uint())
 	b := []byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)}
+
+	if state.frameType == FrameTypeAudioSeekPointIndex && p.name == "IndexedDataLength" {
+		state.indexedDataLength = v
+	}
+
 	o.WriteBytes(b)
 }
 
@@ -782,12 +803,12 @@ func (c *codec24) outputUint64(o *obuf, p property, state *state) {
 	}
 }
 
-func (c *codec24) outputFloat32Slice(o *obuf, p property, state *state) {
+func (c *codec24) outputUint32Slice(o *obuf, p property, state *state) {
 	if o.err != nil {
 		return
 	}
 
-	if p.typ.Elem().Name() != "Fraction" {
+	if p.typ.Elem().Name() != "IndexOffset" {
 		panic(errUnknownFieldType)
 	}
 
@@ -797,20 +818,22 @@ func (c *codec24) outputFloat32Slice(o *obuf, p property, state *state) {
 	switch state.bits {
 	case 8:
 		for i := 0; i < n; i++ {
-			v := uint32(slice.Index(i).Float() * float64(1<<8))
-			if v >= (1 << 8) {
-				v = (1 << 8) - 1
+			offset := uint32(slice.Index(i).Uint())
+			frac := (offset << 8) / state.indexedDataLength
+			if frac >= (1 << 8) {
+				frac = (1 << 8) - 1
 			}
-			o.WriteByte(byte(v))
+			o.WriteByte(byte(frac))
 		}
 
 	case 16:
 		for i := 0; i < n; i++ {
-			v := uint32(slice.Index(i).Float() * float64(1<<16))
-			if v >= (1 << 16) {
-				v = (1 << 16) - 1
+			offset := uint32(slice.Index(i).Uint())
+			frac := (offset << 16) / state.indexedDataLength
+			if frac >= (1 << 16) {
+				frac = (1 << 16) - 1
 			}
-			b := []byte{uint8(v >> 8), byte(uint8(v))}
+			b := []byte{byte(frac >> 8), byte(frac)}
 			o.WriteBytes(b)
 		}
 
