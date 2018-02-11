@@ -128,11 +128,11 @@ type property struct {
 // The state structure keeps track of persistent state required while
 // decoding a single frame.
 type state struct {
-	frameID    FrameID       // current frame ID
-	frameType  FrameType     // current frame type
-	frameValue reflect.Value // current frame's reflected struct value
-	fieldCount int           // current frame's field count
-	fieldIndex int           // current frame field index
+	frameID     FrameID    // current frame ID
+	frameType   FrameType  // current frame type
+	structStack valueStack // stack of active struct values
+	fieldCount  int        // current frame's field count
+	fieldIndex  int        // current frame field index
 }
 
 func (c *codec24) HeaderFlags() flagMap {
@@ -266,7 +266,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 		typ:   typ,
 		value: reflect.New(typ),
 	}
-	c.scanStruct(buf, p, &state, 0)
+	c.scanStruct(buf, p, &state)
 
 	// Return the interpreted frame and header.
 	if buf.err == nil {
@@ -314,18 +314,18 @@ func (c *codec24) scanExtraHeaderData(buf *buffer, h *FrameHeader) {
 	}
 }
 
-func (c *codec24) scanStruct(s *buffer, p property, state *state, depth int) {
+func (c *codec24) scanStruct(s *buffer, p property, state *state) {
 	if p.typ.Name() == "FrameHeader" {
 		return
 	}
 
-	if depth == 0 {
-		state.frameValue = p.value.Elem()
+	state.structStack.push(p.value.Elem())
+	if state.structStack.depth() == 1 {
 		state.fieldCount = p.typ.NumField()
 	}
 
 	for ii, n := 0, p.typ.NumField(); ii < n; ii++ {
-		if depth == 0 {
+		if state.structStack.depth() == 1 {
 			state.fieldIndex = ii
 		}
 
@@ -358,7 +358,7 @@ func (c *codec24) scanStruct(s *buffer, p property, state *state, depth int) {
 			case reflect.String:
 				c.scanStringSlice(s, fp, state)
 			case reflect.Struct:
-				c.scanStructSlice(s, fp, state, depth+1)
+				c.scanStructSlice(s, fp, state)
 			default:
 				panic(errUnknownFieldType)
 			}
@@ -367,12 +367,14 @@ func (c *codec24) scanStruct(s *buffer, p property, state *state, depth int) {
 			c.scanString(s, fp, state)
 
 		case reflect.Struct:
-			c.scanStruct(s, fp, state, depth+1)
+			c.scanStruct(s, fp, state)
 
 		default:
 			panic(errUnknownFieldType)
 		}
 	}
+
+	state.structStack.pop()
 }
 
 func (c *codec24) scanUint8(buf *buffer, p property, state *state) {
@@ -484,8 +486,9 @@ func (c *codec24) scanUint32Slice(buf *buffer, p property, state *state) {
 		panic(errUnknownFieldType)
 	}
 
-	length := uint32(state.frameValue.FieldByName("IndexedDataLength").Uint())
-	bits := uint32(state.frameValue.FieldByName("BitsPerIndex").Uint())
+	sf := state.structStack.first()
+	length := uint32(sf.FieldByName("IndexedDataLength").Uint())
+	bits := uint32(sf.FieldByName("BitsPerIndex").Uint())
 
 	var offsets []IndexOffset
 
@@ -526,7 +529,8 @@ func (c *codec24) scanStringSlice(buf *buffer, p property, state *state) {
 		return
 	}
 
-	enc := Encoding(state.frameValue.FieldByName("Encoding").Uint())
+	sf := state.structStack.first()
+	enc := Encoding(sf.FieldByName("Encoding").Uint())
 	ss := buf.ConsumeStrings(enc)
 	if buf.err != nil {
 		return
@@ -534,7 +538,7 @@ func (c *codec24) scanStringSlice(buf *buffer, p property, state *state) {
 	p.value.Set(reflect.ValueOf(ss))
 }
 
-func (c *codec24) scanStructSlice(buf *buffer, p property, state *state, depth int) {
+func (c *codec24) scanStructSlice(buf *buffer, p property, state *state) {
 	if buf.err != nil {
 		return
 	}
@@ -547,7 +551,7 @@ func (c *codec24) scanStructSlice(buf *buffer, p property, state *state, depth i
 			value: reflect.New(etyp),
 		}
 
-		c.scanStruct(buf, ep, state, depth+1)
+		c.scanStruct(buf, ep, state)
 		if buf.err != nil {
 			return
 		}
@@ -577,7 +581,8 @@ func (c *codec24) scanString(buf *buffer, p property, state *state) {
 	case "WesternString":
 		enc = EncodingISO88591
 	default:
-		enc = Encoding(state.frameValue.FieldByName("Encoding").Uint())
+		sf := state.structStack.first()
+		enc = Encoding(sf.FieldByName("Encoding").Uint())
 	}
 
 	var str string
@@ -604,7 +609,7 @@ func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
 	}
 	state := state{}
 
-	c.outputStruct(buf, p, &state, 0)
+	c.outputStruct(buf, p, &state)
 	if buf.err != nil {
 		return buf.n, buf.err
 	}
@@ -635,18 +640,18 @@ func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
 	return n, buf.err
 }
 
-func (c *codec24) outputStruct(buf *buffer, p property, state *state, depth int) {
+func (c *codec24) outputStruct(buf *buffer, p property, state *state) {
 	if p.typ.Name() == "FrameHeader" {
 		return
 	}
 
-	if depth == 0 {
-		state.frameValue = p.value
+	state.structStack.push(p.value)
+	if state.structStack.depth() == 1 {
 		state.fieldCount = p.typ.NumField()
 	}
 
 	for i, n := 0, p.typ.NumField(); i < n; i++ {
-		if depth == 0 {
+		if state.structStack.depth() == 1 {
 			state.fieldIndex = i
 		}
 
@@ -679,21 +684,23 @@ func (c *codec24) outputStruct(buf *buffer, p property, state *state, depth int)
 			case reflect.String:
 				c.outputStringSlice(buf, fp, state)
 			case reflect.Struct:
-				c.outputStructSlice(buf, fp, state, depth+1)
+				c.outputStructSlice(buf, fp, state)
 			default:
 				panic(errUnknownFieldType)
 			}
 
 		case reflect.String:
-			c.outputString(buf, fp, state, depth)
+			c.outputString(buf, fp, state)
 
 		case reflect.Struct:
-			c.outputStruct(buf, fp, state, depth+1)
+			c.outputStruct(buf, fp, state)
 
 		default:
 			panic(errUnknownFieldType)
 		}
 	}
+
+	state.structStack.pop()
 }
 
 func (c *codec24) outputUint8(buf *buffer, p property, state *state) {
@@ -791,8 +798,9 @@ func (c *codec24) outputUint32Slice(buf *buffer, p property, state *state) {
 		panic(errUnknownFieldType)
 	}
 
-	length := uint32(state.frameValue.FieldByName("IndexedDataLength").Uint())
-	bits := uint32(state.frameValue.FieldByName("BitsPerIndex").Uint())
+	sf := state.structStack.first()
+	length := uint32(sf.FieldByName("IndexedDataLength").Uint())
+	bits := uint32(sf.FieldByName("BitsPerIndex").Uint())
 
 	n := p.value.Len()
 	slice := p.value.Slice(0, n)
@@ -839,14 +847,15 @@ func (c *codec24) outputStringSlice(buf *buffer, p property, state *state) {
 		return
 	}
 
-	enc := Encoding(state.frameValue.FieldByName("Encoding").Uint())
+	sf := state.structStack.first()
+	enc := Encoding(sf.FieldByName("Encoding").Uint())
 
 	var ss []string
 	reflect.ValueOf(&ss).Elem().Set(p.value)
 	buf.AddStrings(ss, enc)
 }
 
-func (c *codec24) outputStructSlice(buf *buffer, p property, state *state, depth int) {
+func (c *codec24) outputStructSlice(buf *buffer, p property, state *state) {
 	if buf.err != nil {
 		return
 	}
@@ -862,14 +871,14 @@ func (c *codec24) outputStructSlice(buf *buffer, p property, state *state, depth
 			value: elem,
 		}
 
-		c.outputStruct(buf, ep, state, depth+1)
+		c.outputStruct(buf, ep, state)
 		if buf.err != nil {
 			return
 		}
 	}
 }
 
-func (c *codec24) outputString(buf *buffer, p property, state *state, depth int) {
+func (c *codec24) outputString(buf *buffer, p property, state *state) {
 	if buf.err != nil {
 		return
 	}
@@ -886,7 +895,8 @@ func (c *codec24) outputString(buf *buffer, p property, state *state, depth int)
 	case "WesternString":
 		enc = EncodingISO88591
 	default:
-		enc = Encoding(state.frameValue.FieldByName("Encoding").Uint())
+		sf := state.structStack.first()
+		enc = Encoding(sf.FieldByName("Encoding").Uint())
 	}
 
 	switch p.typ.Name() {
@@ -895,7 +905,7 @@ func (c *codec24) outputString(buf *buffer, p property, state *state, depth int)
 	default:
 		// Always terminate strings unless they are the last struct field
 		// of the root level struct.
-		term := depth > 0 || (state.fieldIndex != state.fieldCount-1)
+		term := state.structStack.depth() > 1 || (state.fieldIndex != state.fieldCount-1)
 		buf.AddString(v, enc, term)
 	}
 }

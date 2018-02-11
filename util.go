@@ -2,6 +2,7 @@ package id3
 
 import (
 	"io"
+	"reflect"
 )
 
 // Decode a sync-safe uint32 from a byte slice containing 4 or 5 bytes.
@@ -54,6 +55,37 @@ func writeByte(w io.Writer, b byte) error {
 	buf[0] = b
 	_, err := w.Write(buf)
 	return err
+}
+
+//
+// valueStack
+//
+
+type valueStack struct {
+	stack []reflect.Value
+}
+
+func (v *valueStack) pop() reflect.Value {
+	n := len(v.stack) - 1
+	ret := v.stack[n]
+	v.stack = v.stack[:n]
+	return ret
+}
+
+func (v *valueStack) push(rv reflect.Value) {
+	v.stack = append(v.stack, rv)
+}
+
+func (v *valueStack) top() reflect.Value {
+	return v.stack[len(v.stack)-1]
+}
+
+func (v *valueStack) first() reflect.Value {
+	return v.stack[0]
+}
+
+func (v *valueStack) depth() int {
+	return len(v.stack)
 }
 
 //
