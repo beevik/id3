@@ -439,7 +439,7 @@ type FrameLyricsSync struct {
 	FrameType        FrameType
 	Encoding         Encoding
 	Language         string
-	Format           TimeStampFormat
+	TimeStampFormat  TimeStampFormat
 	LyricContentType LyricContentType
 	Descriptor       string
 	Sync             []LyricsSync
@@ -452,7 +452,7 @@ func NewFrameLyricsSync(language, descriptor string,
 		FrameType:        FrameTypeLyricsSync,
 		Encoding:         EncodingUTF8,
 		Language:         language,
-		Format:           format,
+		TimeStampFormat:  format,
 		LyricContentType: typ,
 		Descriptor:       descriptor,
 		Sync:             []LyricsSync{},

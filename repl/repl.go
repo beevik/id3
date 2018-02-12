@@ -129,4 +129,6 @@ func writeTag() {
 
 	buf := bytes.NewBuffer([]byte{})
 	tag.WriteTo(buf)
+
+	//hexdump.Dump(buf.Bytes(), hexdump.FormatGo, os.Stdout)
 }

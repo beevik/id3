@@ -180,16 +180,25 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 		t.CRC = uint32(crc32.ChecksumIEEE(buf.Bytes()))
 	}
 
+	if (t.Flags & (TagFlagHasCRC | TagFlagHasRestrictions | TagFlagIsUpdate)) != 0 {
+		t.Flags |= TagFlagExtended
+	}
+
 	// Unsynchronize the tag if requested.
 	b := buf.Bytes()
 	if (t.Flags & TagFlagUnsync) != 0 {
 		b = addUnsyncCodes(b)
 	}
 
+	// Encode the extended header.
+	exBuf := bytes.NewBuffer([]byte{})
+	codec.EncodeExtendedHeader(t, exBuf)
+	size := len(b) + exBuf.Len()
+
 	// Create a buffer holding the 10-byte header.
 	flags := uint8(codec.HeaderFlags().Encode(uint32(t.Flags)))
 	hdr := []byte{'I', 'D', '3', byte(t.Version), 0, flags, 0, 0, 0, 0}
-	err = encodeSyncSafeUint32(hdr[6:10], uint32(len(b)))
+	err = encodeSyncSafeUint32(hdr[6:10], uint32(size))
 	if err != nil {
 		return 0, err
 	}
@@ -204,7 +213,7 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 	}
 
 	// Write the extended header.
-	nn, err = codec.EncodeExtendedHeader(t, w)
+	nn, err = w.Write(exBuf.Bytes())
 	n += int64(nn)
 	if err != nil {
 		return n, err

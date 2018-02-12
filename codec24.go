@@ -334,11 +334,6 @@ func (c *codec24) scanStruct(s *buffer, p property, state *state) {
 			state.fieldIndex = ii
 		}
 
-		counter++
-		if counter == 58 {
-			foo := 0
-			_ = foo
-		}
 		field := p.typ.Field(ii)
 
 		fp := property{
@@ -501,10 +496,10 @@ func (c *codec24) scanUint32Slice(buf *buffer, p property, state *state) {
 	ff := buf.ConsumeAll()
 	switch bits {
 	case 8:
-		offsets = make([]uint32, len(ff))
+		offsets = make([]uint32, 0, len(ff))
 		for _, f := range ff {
 			frac := uint32(f)
-			offset := (frac*length + (1 << 7)) << 8
+			offset := (frac*length + (1 << 7)) >> 8
 			if offset > length {
 				offset = length
 			}
@@ -512,10 +507,10 @@ func (c *codec24) scanUint32Slice(buf *buffer, p property, state *state) {
 		}
 
 	case 16:
-		offsets = make([]uint32, len(ff)/2)
+		offsets = make([]uint32, 0, len(ff)/2)
 		for ii := 0; ii < len(ff); ii += 2 {
 			frac := uint32(ff[ii])<<8 | uint32(ff[ii+1])
-			offset := (frac*length + (1 << 15)) << 16
+			offset := (frac*length + (1 << 15)) >> 16
 			if offset > length {
 				offset = length
 			}
@@ -578,8 +573,13 @@ func (c *codec24) scanString(buf *buffer, p property, state *state) {
 		return
 	}
 
-	if p.name == "FrameID" {
+	switch p.name {
+	case "FrameID":
 		p.value.SetString(string(state.frameID))
+		return
+	case "Language":
+		str := buf.ConsumeFixedLengthString(3, EncodingISO88591)
+		p.value.SetString(str)
 		return
 	}
 
@@ -592,13 +592,7 @@ func (c *codec24) scanString(buf *buffer, p property, state *state) {
 		enc = Encoding(sf.FieldByName("Encoding").Uint())
 	}
 
-	var str string
-	switch p.name {
-	case "Language":
-		str = buf.ConsumeFixedLengthString(3, EncodingISO88591)
-	default:
-		str = buf.ConsumeNextString(enc)
-	}
+	str := buf.ConsumeNextString(enc)
 
 	if buf.err != nil {
 		return
@@ -963,8 +957,12 @@ func (c *codec24) outputString(buf *buffer, p property, state *state) {
 
 	v := p.value.String()
 
-	if p.name == "FrameID" {
+	switch p.name {
+	case "FrameID":
 		state.frameID = v
+		return
+	case "Language":
+		buf.AddFixedLengthString(v, 3, EncodingISO88591)
 		return
 	}
 
@@ -977,13 +975,8 @@ func (c *codec24) outputString(buf *buffer, p property, state *state) {
 		enc = Encoding(sf.FieldByName("Encoding").Uint())
 	}
 
-	switch p.name {
-	case "Language":
-		buf.AddFixedLengthString(v, 3, enc)
-	default:
-		// Always terminate strings unless they are the last struct field
-		// of the root level struct.
-		term := state.structStack.depth() > 1 || (state.fieldIndex != state.fieldCount-1)
-		buf.AddString(v, enc, term)
-	}
+	// Always terminate strings unless they are the last struct field
+	// of the root level struct.
+	term := state.structStack.depth() > 1 || (state.fieldIndex != state.fieldCount-1)
+	buf.AddString(v, enc, term)
 }

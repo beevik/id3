@@ -92,7 +92,7 @@ func (b *buffer) ConsumeFixedLengthString(len int, enc Encoding) string {
 	}
 
 	var str string
-	str, b.err = decodeString(bb, EncodingISO88591)
+	str, b.err = decodeString(bb, enc)
 	return str
 }
 
