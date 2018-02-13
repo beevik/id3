@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -104,9 +105,9 @@ func writeTag() {
 	tag.Frames = append(tag.Frames, com)
 
 	lyr := id3.NewFrameLyricsSync("eng", "lyrics", id3.TimeStampMilliseconds, id3.LyricContentTypeTranscription)
-	lyr.AddSync(id3.LyricsSync{Text: "c", TimeStamp: 3})
-	lyr.AddSync(id3.LyricsSync{Text: "a", TimeStamp: 1})
-	lyr.AddSync(id3.LyricsSync{Text: "b", TimeStamp: 2})
+	lyr.AddSync(id3.LyricsSync{Text: "This ", TimeStamp: 3000})
+	lyr.AddSync(id3.LyricsSync{Text: "is ", TimeStamp: 1000})
+	lyr.AddSync(id3.LyricsSync{Text: "a song.", TimeStamp: 2001})
 	tag.Frames = append(tag.Frames, lyr)
 
 	playcount := id3.NewFramePlayCount(0x1234567890aabbcc)
@@ -114,6 +115,9 @@ func writeTag() {
 
 	title := id3.NewFrameText(id3.FrameTypeTextSongTitle, "Yellow Submarine")
 	tag.Frames = append(tag.Frames, title)
+
+	tx := id3.NewFrameTextCustom("label", "content")
+	tag.Frames = append(tag.Frames, tx)
 
 	priv := id3.NewFramePrivate("owner", []byte{0, 1, 2, 3})
 	tag.Frames = append(tag.Frames, priv)
@@ -123,12 +127,32 @@ func writeTag() {
 	sp.AddIndexOffset(2)
 	sp.AddIndexOffset(951)
 	sp.AddIndexOffset(800)
-	sp.AddIndexOffset(400)
-
+	sp.AddIndexOffset(401)
 	tag.Frames = append(tag.Frames, sp)
 
 	buf := bytes.NewBuffer([]byte{})
 	tag.WriteTo(buf)
 
-	//hexdump.Dump(buf.Bytes(), hexdump.FormatGo, os.Stdout)
+	hexdump(buf.Bytes(), os.Stdout)
+}
+
+func hexdump(b []byte, w io.Writer) {
+	fmt.Fprintf(w, "var b = []byte{\n")
+
+	for i := 0; i < len(b); i += 8 {
+		r := i + 8
+		if r > len(b) {
+			r = len(b)
+		}
+
+		fmt.Fprintf(w, "\t")
+
+		var j int
+		for j = i; j < r-1; j++ {
+			fmt.Fprintf(w, "0x%02x, ", b[j])
+		}
+		fmt.Fprintf(w, "0x%02x,\n", b[j])
+	}
+
+	fmt.Fprintf(w, "}\n")
 }

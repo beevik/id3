@@ -1,6 +1,7 @@
 package id3
 
 import (
+	"fmt"
 	"io"
 	"reflect"
 )
@@ -55,6 +56,27 @@ func writeByte(w io.Writer, b byte) error {
 	buf[0] = b
 	_, err := w.Write(buf)
 	return err
+}
+
+func hexdump(b []byte, w io.Writer) {
+	fmt.Fprintf(w, "var b = []byte{\n")
+
+	for i := 0; i < len(b); i += 8 {
+		r := i + 8
+		if r > len(b) {
+			r = len(b)
+		}
+
+		fmt.Fprintf(w, "\t")
+
+		var j int
+		for j = i; j < r-1; j++ {
+			fmt.Fprintf(w, "0x%02x, ", b[j])
+		}
+		fmt.Fprintf(w, "0x%02x,\n", b[j])
+	}
+
+	fmt.Fprintf(w, "}\n")
 }
 
 //
