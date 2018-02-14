@@ -105,9 +105,9 @@ func writeTag() {
 	tag.Frames = append(tag.Frames, com)
 
 	lyr := id3.NewFrameLyricsSync("eng", "lyrics", id3.TimeStampMilliseconds, id3.LyricContentTypeTranscription)
-	lyr.AddSync(id3.LyricsSync{Text: "This ", TimeStamp: 3000})
-	lyr.AddSync(id3.LyricsSync{Text: "is ", TimeStamp: 1000})
-	lyr.AddSync(id3.LyricsSync{Text: "a song.", TimeStamp: 2001})
+	lyr.AddSync(3000, "This ")
+	lyr.AddSync(1000, "is ")
+	lyr.AddSync(2001, "a song.")
 	tag.Frames = append(tag.Frames, lyr)
 
 	playcount := id3.NewFramePlayCount(0x1234567890aabbcc)

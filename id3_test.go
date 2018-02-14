@@ -350,3 +350,191 @@ func TestFrame(t *testing.T) {
 		t.Errorf("Tag write error: Different bytes encoded")
 	}
 }
+
+func serialize(t *testing.T, f Frame) {
+	tag1 := Tag{Version: Version2_4}
+	tag1.Flags |= TagFlagHasCRC
+
+	tag1.Frames = append(tag1.Frames, f)
+
+	buf := bytes.NewBuffer([]byte{})
+	n1, err := tag1.WriteTo(buf)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if tag1.CRC == 0 {
+		t.Error("CRC not computed")
+	}
+
+	a := bytes.NewBuffer(buf.Bytes())
+
+	tag2 := Tag{}
+	n2, err := tag2.ReadFrom(buf)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if n1 != n2 {
+		t.Error("Bytes read != bytes written")
+	}
+
+	b := bytes.NewBuffer([]byte{})
+	_, err = tag2.WriteTo(b)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if tag1.CRC != tag2.CRC {
+		t.Error("CRC mismatch")
+	}
+	if tag1.Size != tag2.Size {
+		t.Error("Size mismatch")
+	}
+	if tag1.Flags != tag2.Flags {
+		t.Error("Flags mismatch")
+	}
+	if bytes.Compare(a.Bytes(), b.Bytes()) != 0 {
+		t.Errorf("Bytes mismatched: %s\n", HeaderOf(f).FrameID)
+	}
+}
+
+func TestTextFrames(t *testing.T) {
+	for typ := FrameTypeTextGroupDescription; typ < FrameTypeTextCustom; typ++ {
+		f := NewFrameText(typ, "Text frame contents")
+		serialize(t, f)
+	}
+}
+
+func TestTXXX(t *testing.T) {
+	f := NewFrameTextCustom("description", "Text frame contents")
+	serialize(t, f)
+}
+
+func TestURLFrames(t *testing.T) {
+	for typ := FrameTypeURLArtist; typ < FrameTypeURLCustom; typ++ {
+		f := NewFrameURL(typ, "http://www.example.com/request?id=10")
+		serialize(t, f)
+	}
+}
+
+func testWXXX(t *testing.T) {
+	f := NewFrameURLCustom("description", "http://www.example.com/request?id=10")
+	serialize(t, f)
+}
+
+func TestAPIC(t *testing.T) {
+	data := make([]byte, 1024)
+	f := NewFrameAttachedPicture("image/jpeg", "description", PictureTypeCoverFront, data)
+	serialize(t, f)
+}
+
+func TestAENC(t *testing.T) {
+	data := make([]byte, 1024)
+	f := NewFrameAudioEncryption("owner", 1000, 32768, data)
+	serialize(t, f)
+}
+
+func TestASPI(t *testing.T) {
+	f := NewFrameAudioSeekPointIndex(30, 3100)
+	for i := 100; i >= 0; i-- {
+		f.AddIndexOffset(uint32(i * 30))
+	}
+	f.AddIndexOffset(1505)
+	f.AddIndexOffset(3100)
+
+	for i := 1; i < int(f.IndexPoints); i++ {
+		if f.IndexOffsets[i-1] > f.IndexOffsets[i] {
+			t.Error("ASPI indexes out of order")
+		}
+	}
+	if f.IndexPoints != 103 {
+		t.Error("ASPI frame index points incorrect")
+	}
+
+	serialize(t, f)
+}
+
+func TestCOMM(t *testing.T) {
+	f := NewFrameComment("eng", "description", "This is the comment")
+	serialize(t, f)
+}
+
+func TestGRID(t *testing.T) {
+	data := make([]byte, 1024)
+	f := NewFrameGroupID("owner", 0x85, data)
+	serialize(t, f)
+}
+
+func TestUSLT(t *testing.T) {
+	f := NewFrameLyricsUnsync("eng", "descriptor", "These are the\nlyrics!")
+	serialize(t, f)
+}
+
+func TestSYLT(t *testing.T) {
+	f := NewFrameLyricsSync("eng", "descriptor", TimeStampMilliseconds, LyricContentTypeLyrics)
+	f.AddSync(10000, "line 3")
+	f.AddSync(5000, "line 1")
+	f.AddSync(7500, "line 2")
+	f.AddSync(12000, "line 4")
+
+	for i := 0; i < 3; i++ {
+		if f.Sync[i].TimeStamp > f.Sync[i+1].TimeStamp {
+			t.Error("SYLT syncs out of order")
+		}
+	}
+
+	serialize(t, f)
+}
+
+var counts = []uint64{
+	0x0000000000000000, 0x0000000000001000, 0x0000000010000000,
+	0x0000001234567890, 0x00001234567890ab, 0x001234567890abcd,
+	0x1234567890abcdef,
+}
+
+func testPCNT(t *testing.T) {
+	for _, c := range counts {
+		f := NewFramePlayCount(c)
+		serialize(t, f)
+	}
+}
+
+func testPOPM(t *testing.T) {
+	for _, c := range counts {
+		f := NewFramePopularimeter("johndoe@gmail.com", 80, c)
+		serialize(t, f)
+	}
+}
+
+func testPRIV(t *testing.T) {
+	data := make([]byte, 1024)
+	f := NewFramePrivate("owner", data)
+	serialize(t, f)
+}
+
+func testSYTC(t *testing.T) {
+	f := NewFrameSyncTempoCodes(TimeStampFrames)
+	f.AddSync(120, 2000)
+	f.AddSync(510, 500)
+	f.AddSync(0, 1000)
+	f.AddSync(257, 3000)
+
+	for i := 0; i < 3; i++ {
+		if f.Sync[i].TimeStamp > f.Sync[i+1].TimeStamp {
+			t.Error("SYTC syncs out of order")
+		}
+	}
+
+	serialize(t, f)
+}
+
+func testUSER(t *testing.T) {
+	f := NewFrameTermsOfUse("eng", "Terms of Use")
+	serialize(t, f)
+}
+
+func testUFID(t *testing.T) {
+	f := NewFrameUniqueFileID("owner", "b28f6045-9958-44b5-9da8-34703f5ffa13")
+	serialize(t, f)
+}

@@ -82,7 +82,7 @@ const (
 // A FrameType value identifies the type of an ID3 frame.
 type FrameType uint8
 
-// All standard types of text frames.
+// All standard frames types.
 const (
 	// Text frames: Identification (ID3v2.4 spec section 4.2.1)
 	FrameTypeTextGroupDescription FrameType = iota // TIT1
@@ -159,10 +159,12 @@ const (
 	FrameTypeURLAudioSource  // WOAS
 	FrameTypeURLCommercial   // WCOM
 	FrameTypeURLCopyright    // WCOP
-	FrameTypeURLCustom       // WXXX
 	FrameTypeURLPayment      // WPAY
 	FrameTypeURLPublisher    // WPUB
 	FrameTypeURLRadioStation // WORS
+
+	// URL frames: custom
+	FrameTypeURLCustom // WXXX
 
 	// Other frames
 	FrameTypeAttachedPicture     // APIC
@@ -377,28 +379,6 @@ func NewFrameGroupID(owner string, groupID uint8, data []byte) *FrameGroupID {
 	}
 }
 
-// FrameLyricsUnsync contains unsynchronized lyrics and text transcription
-// data.
-type FrameLyricsUnsync struct {
-	Header     FrameHeader
-	FrameType  FrameType
-	Encoding   Encoding
-	Language   string
-	Descriptor string
-	Text       string
-}
-
-// NewFrameLyricsUnsync creates a new unsynchronized lyrics frame.
-func NewFrameLyricsUnsync(language, descriptor, lyrics string) *FrameLyricsUnsync {
-	return &FrameLyricsUnsync{
-		FrameType:  FrameTypeLyricsUnsync,
-		Encoding:   EncodingUTF8,
-		Language:   language,
-		Descriptor: descriptor,
-		Text:       lyrics,
-	}
-}
-
 // LyricContentType indicates type type of lyrics stored in a synchronized
 // lyric frame.
 type LyricContentType byte
@@ -461,20 +441,42 @@ func NewFrameLyricsSync(language, descriptor string,
 
 // AddSync inserts a time-stamped syllable into a synchronized lyric
 // frame. It inserts the syllable in sorted order by time stamp.
-func (f *FrameLyricsSync) AddSync(sync LyricsSync) {
+func (f *FrameLyricsSync) AddSync(timestamp uint32, text string) {
 	var i int
 	for i = 0; i < len(f.Sync); i++ {
-		if f.Sync[i].TimeStamp > sync.TimeStamp {
+		if f.Sync[i].TimeStamp > timestamp {
 			break
 		}
 	}
 	switch {
 	case i == len(f.Sync):
-		f.Sync = append(f.Sync, sync)
+		f.Sync = append(f.Sync, LyricsSync{text, timestamp})
 	default:
 		f.Sync = append(f.Sync, LyricsSync{})
 		copy(f.Sync[i+1:], f.Sync[i:])
-		f.Sync[i] = sync
+		f.Sync[i] = LyricsSync{text, timestamp}
+	}
+}
+
+// FrameLyricsUnsync contains unsynchronized lyrics and text transcription
+// data.
+type FrameLyricsUnsync struct {
+	Header     FrameHeader
+	FrameType  FrameType
+	Encoding   Encoding
+	Language   string
+	Descriptor string
+	Text       string
+}
+
+// NewFrameLyricsUnsync creates a new unsynchronized lyrics frame.
+func NewFrameLyricsUnsync(language, descriptor, lyrics string) *FrameLyricsUnsync {
+	return &FrameLyricsUnsync{
+		FrameType:  FrameTypeLyricsUnsync,
+		Encoding:   EncodingUTF8,
+		Language:   language,
+		Descriptor: descriptor,
+		Text:       lyrics,
 	}
 }
 
@@ -555,20 +557,20 @@ func NewFrameSyncTempoCodes(format TimeStampFormat) *FrameSyncTempoCodes {
 
 // AddSync inserts a time-stamped syllable into a synchronized lyric
 // frame. It inserts the syllable in sorted order by time stamp.
-func (f *FrameSyncTempoCodes) AddSync(sync TempoSync) {
+func (f *FrameSyncTempoCodes) AddSync(bpm uint16, timestamp uint32) {
 	var i int
 	for i = 0; i < len(f.Sync); i++ {
-		if f.Sync[i].TimeStamp > sync.TimeStamp {
+		if f.Sync[i].TimeStamp > timestamp {
 			break
 		}
 	}
 	switch {
 	case i == len(f.Sync):
-		f.Sync = append(f.Sync, sync)
+		f.Sync = append(f.Sync, TempoSync{bpm, timestamp})
 	default:
 		f.Sync = append(f.Sync, TempoSync{})
 		copy(f.Sync[i+1:], f.Sync[i:])
-		f.Sync[i] = sync
+		f.Sync[i] = TempoSync{bpm, timestamp}
 	}
 }
 

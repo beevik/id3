@@ -194,6 +194,7 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 	exBuf := bytes.NewBuffer([]byte{})
 	codec.EncodeExtendedHeader(t, exBuf)
 	size := len(b) + exBuf.Len()
+	t.Size = size
 
 	// Create a buffer holding the 10-byte header.
 	flags := uint8(codec.HeaderFlags().Encode(uint32(t.Flags)))
