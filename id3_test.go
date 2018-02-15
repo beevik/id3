@@ -354,6 +354,7 @@ func TestFrame(t *testing.T) {
 func serialize(t *testing.T, f Frame) {
 	tag1 := Tag{Version: Version2_4}
 	tag1.Flags |= TagFlagHasCRC
+	tag1.Padding = 512
 
 	tag1.Frames = append(tag1.Frames, f)
 
@@ -418,7 +419,7 @@ func TestURLFrames(t *testing.T) {
 	}
 }
 
-func testWXXX(t *testing.T) {
+func TestWXXX(t *testing.T) {
 	f := NewFrameURLCustom("description", "http://www.example.com/request?id=10")
 	serialize(t, f)
 }
@@ -493,27 +494,27 @@ var counts = []uint64{
 	0x1234567890abcdef,
 }
 
-func testPCNT(t *testing.T) {
+func TestPCNT(t *testing.T) {
 	for _, c := range counts {
 		f := NewFramePlayCount(c)
 		serialize(t, f)
 	}
 }
 
-func testPOPM(t *testing.T) {
+func TestPOPM(t *testing.T) {
 	for _, c := range counts {
 		f := NewFramePopularimeter("johndoe@gmail.com", 80, c)
 		serialize(t, f)
 	}
 }
 
-func testPRIV(t *testing.T) {
+func TestPRIV(t *testing.T) {
 	data := make([]byte, 1024)
 	f := NewFramePrivate("owner", data)
 	serialize(t, f)
 }
 
-func testSYTC(t *testing.T) {
+func TestSYTC(t *testing.T) {
 	f := NewFrameSyncTempoCodes(TimeStampFrames)
 	f.AddSync(120, 2000)
 	f.AddSync(510, 500)
@@ -529,12 +530,12 @@ func testSYTC(t *testing.T) {
 	serialize(t, f)
 }
 
-func testUSER(t *testing.T) {
+func TestUSER(t *testing.T) {
 	f := NewFrameTermsOfUse("eng", "Terms of Use")
 	serialize(t, f)
 }
 
-func testUFID(t *testing.T) {
+func TestUFID(t *testing.T) {
 	f := NewFrameUniqueFileID("owner", "b28f6045-9958-44b5-9da8-34703f5ffa13")
 	serialize(t, f)
 }

@@ -120,8 +120,8 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 		_, err = codec.DecodeFrame(t, &f, rb)
 
 		if err == errPaddingEncountered {
-			t.Padding = rb.Len()
-			pad := make([]byte, t.Padding)
+			t.Padding = rb.Len() + 4
+			pad := make([]byte, rb.Len())
 			_, err = io.ReadFull(rb, pad)
 			if err != nil {
 				return n, err
@@ -175,6 +175,12 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 		}
 	}
 
+	// Add padding.
+	if t.Padding > 0 {
+		pad := make([]byte, t.Padding)
+		buf.Write(pad)
+	}
+
 	// Calculate CRC if requested.
 	if (t.Flags & TagFlagHasCRC) != 0 {
 		t.CRC = uint32(crc32.ChecksumIEEE(buf.Bytes()))
@@ -193,13 +199,12 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 	// Encode the extended header.
 	exBuf := bytes.NewBuffer([]byte{})
 	codec.EncodeExtendedHeader(t, exBuf)
-	size := len(b) + exBuf.Len()
-	t.Size = size
+	t.Size = len(b) + exBuf.Len()
 
 	// Create a buffer holding the 10-byte header.
 	flags := uint8(codec.HeaderFlags().Encode(uint32(t.Flags)))
 	hdr := []byte{'I', 'D', '3', byte(t.Version), 0, flags, 0, 0, 0, 0}
-	err = encodeSyncSafeUint32(hdr[6:10], uint32(size))
+	err = encodeSyncSafeUint32(hdr[6:10], uint32(t.Size))
 	if err != nil {
 		return 0, err
 	}
