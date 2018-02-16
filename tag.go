@@ -70,13 +70,8 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 		return n, err
 	}
 
-	// Allow the codec to interpret the flags field.
-	flags := uint32(hdr[5])
-	t.Flags = TagFlags(codec.HeaderFlags().Decode(flags))
-
-	// Process the tag size.
-	size, err := decodeSyncSafeUint32(hdr[6:10])
-	t.Size = int(size)
+	// Decode the rest of the tag's header.
+	_, err = codec.DecodeHeader(t, bytes.NewBuffer(hdr))
 	if err != nil {
 		return n, err
 	}
@@ -164,10 +159,10 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 		return 0, err
 	}
 
-	// Create a temporary buffer to hold everything but the 10-byte header.
+	// Create a buffer to hold everything but the 10-byte header.
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
 
-	// Encode the tag's frames into the temporary buffer.
+	// Encode the tag's frames into the buffer.
 	for _, f := range t.Frames {
 		_, err := codec.EncodeFrame(t, f, buf)
 		if err != nil {
@@ -186,6 +181,7 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 		t.CRC = uint32(crc32.ChecksumIEEE(buf.Bytes()))
 	}
 
+	// Mark the extended flag if necessary.
 	if (t.Flags & (TagFlagHasCRC | TagFlagHasRestrictions | TagFlagIsUpdate)) != 0 {
 		t.Flags |= TagFlagExtended
 	}
@@ -196,26 +192,18 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 		b = addUnsyncCodes(b)
 	}
 
-	// Encode the extended header.
+	// Encode the extended header into a buffer.
 	exBuf := bytes.NewBuffer([]byte{})
 	codec.EncodeExtendedHeader(t, exBuf)
 	t.Size = len(b) + exBuf.Len()
 
-	// Create a buffer holding the 10-byte header.
-	flags := uint8(codec.HeaderFlags().Encode(uint32(t.Flags)))
-	hdr := []byte{'I', 'D', '3', byte(t.Version), 0, flags, 0, 0, 0, 0}
-	err = encodeSyncSafeUint32(hdr[6:10], uint32(t.Size))
-	if err != nil {
-		return 0, err
-	}
-
 	var n int64
 
-	// Write the header to the output stream.
-	nn, err := w.Write(hdr)
+	// Encode and write the tag header.
+	nn, err := codec.EncodeHeader(t, w)
 	n += int64(nn)
 	if err != nil {
-		return n, err
+		return 0, err
 	}
 
 	// Write the extended header.

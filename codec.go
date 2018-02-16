@@ -13,9 +13,10 @@ const (
 )
 
 type codec interface {
-	HeaderFlags() flagMap
+	DecodeHeader(t *Tag, r io.Reader) (int, error)
 	DecodeExtendedHeader(t *Tag, r io.Reader) (int, error)
 	DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error)
+	EncodeHeader(t *Tag, w io.Writer) (int, error)
 	EncodeExtendedHeader(t *Tag, w io.Writer) (int, error)
 	EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error)
 }

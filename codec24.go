@@ -137,8 +137,21 @@ type state struct {
 	fieldIndex  int        // current frame field index
 }
 
-func (c *codec24) HeaderFlags() flagMap {
-	return c.headerFlags
+func (c *codec24) DecodeHeader(t *Tag, r io.Reader) (int, error) {
+	hdr := make([]byte, 10)
+	n, err := io.ReadFull(r, hdr)
+	if err != nil {
+		return n, err
+	}
+
+	// Allow the codec to interpret the flags field.
+	flags := uint32(hdr[5])
+	t.Flags = TagFlags(c.headerFlags.Decode(flags))
+
+	// Process the tag size.
+	size, err := decodeSyncSafeUint32(hdr[6:10])
+	t.Size = int(size)
+	return n, err
 }
 
 func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
@@ -635,6 +648,17 @@ func (c *codec24) EncodeExtendedHeader(t *Tag, w io.Writer) (int, error) {
 		return w.Write(b)
 	}
 	return 0, nil
+}
+
+func (c *codec24) EncodeHeader(t *Tag, w io.Writer) (int, error) {
+	flags := uint8(c.headerFlags.Encode(uint32(t.Flags)))
+	hdr := []byte{'I', 'D', '3', byte(t.Version), 0, flags, 0, 0, 0, 0}
+	err := encodeSyncSafeUint32(hdr[6:10], uint32(t.Size))
+	if err != nil {
+		return 0, err
+	}
+
+	return w.Write(hdr)
 }
 
 func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {

@@ -11,8 +11,8 @@ func newCodec23() *codec23 {
 	return &codec23{}
 }
 
-func (c *codec23) HeaderFlags() flagMap {
-	return flagMap{}
+func (c *codec23) DecodeHeader(t *Tag, r io.Reader) (int, error) {
+	return 0, errUnimplemented
 }
 
 func (c *codec23) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
@@ -20,6 +20,10 @@ func (c *codec23) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 }
 
 func (c *codec23) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
+	return 0, errUnimplemented
+}
+
+func (c *codec23) EncodeHeader(t *Tag, w io.Writer) (int, error) {
 	return 0, errUnimplemented
 }
 
