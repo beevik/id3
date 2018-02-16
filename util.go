@@ -40,24 +40,6 @@ func encodeSyncSafeUint32(b []byte, value uint32) error {
 	return nil
 }
 
-// Read a single byte from a reader.
-func readByte(r io.Reader) (byte, error) {
-	buf := make([]byte, 1)
-	_, err := r.Read(buf)
-	if err != nil {
-		return 0, err
-	}
-	return buf[0], err
-}
-
-// Write a single byte to a writer.
-func writeByte(w io.Writer, b byte) error {
-	buf := make([]byte, 1)
-	buf[0] = b
-	_, err := w.Write(buf)
-	return err
-}
-
 func hexdump(b []byte, w io.Writer) {
 	fmt.Fprintf(w, "var b = []byte{\n")
 
@@ -96,10 +78,6 @@ func (v *valueStack) pop() reflect.Value {
 
 func (v *valueStack) push(rv reflect.Value) {
 	v.stack = append(v.stack, rv)
-}
-
-func (v *valueStack) top() reflect.Value {
-	return v.stack[len(v.stack)-1]
 }
 
 func (v *valueStack) first() reflect.Value {
