@@ -182,6 +182,20 @@ func (w *writer) Bytes() []byte {
 	return w.buf
 }
 
+// SliceBuffer returns a slice of the reader's buffer starting at the
+// offset and ending after length bytes.
+func (w *writer) SliceBuffer(offset int, length int) []byte {
+	return w.buf[offset : offset+length]
+}
+
+// ConsumeBytes consumes all bytes in the writer's output buffer starting
+// from the offset. It returns the consumed bytes.
+func (w *writer) ConsumeBytes(offset int) []byte {
+	b := w.buf[offset:]
+	w.buf = w.buf[:offset]
+	return b
+}
+
 // SaveTo writes all unsaved bytes in the writer's buffer to the stream.
 func (w *writer) Save() (int, error) {
 	if w.err != nil {

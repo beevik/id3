@@ -2,6 +2,7 @@ package id3
 
 import (
 	"bytes"
+	"os"
 	"testing"
 )
 
@@ -344,10 +345,10 @@ func TestFrame(t *testing.T) {
 	}
 	outbuf := b.Bytes()
 
-	//hexdump(outbuf, os.Stdout)
-
 	if bytes.Compare(outbuf, inbuf) != 0 {
 		t.Errorf("Tag write error: Different bytes encoded")
+		hexdump(inbuf, os.Stdout)
+		hexdump(outbuf, os.Stdout)
 	}
 }
 

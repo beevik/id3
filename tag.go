@@ -1,8 +1,6 @@
 package id3
 
 import (
-	"bytes"
-	"hash/crc32"
 	"io"
 )
 
@@ -79,69 +77,14 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 // WriteTo writes an ID3 tag to an output stream. It returns the number of
 // bytes written and any error encountered during encoding.
 func (t *Tag) WriteTo(w io.Writer) (int64, error) {
+	ww := newWriter(w)
+
 	// Select a codec based on the ID3 version.
-	codec, err := newCodec(t.Version)
+	c, err := newCodec(t.Version)
 	if err != nil {
 		return 0, err
 	}
 
-	// Create a buffer to hold everything but the 10-byte header.
-	buf := bytes.NewBuffer(make([]byte, 0, 1024))
-
-	// Encode the tag's frames into the buffer.
-	for _, f := range t.Frames {
-		_, err := codec.EncodeFrame(t, f, buf)
-		if err != nil {
-			return 0, err
-		}
-	}
-
-	// Add padding.
-	if t.Padding > 0 {
-		pad := make([]byte, t.Padding)
-		buf.Write(pad)
-	}
-
-	// Calculate CRC if requested.
-	if (t.Flags & TagFlagHasCRC) != 0 {
-		t.CRC = uint32(crc32.ChecksumIEEE(buf.Bytes()))
-	}
-
-	// Mark the extended flag if necessary.
-	if (t.Flags & (TagFlagHasCRC | TagFlagHasRestrictions | TagFlagIsUpdate)) != 0 {
-		t.Flags |= TagFlagExtended
-	}
-
-	// Unsynchronize the tag if requested.
-	b := buf.Bytes()
-	if (t.Flags & TagFlagUnsync) != 0 {
-		b = addUnsyncCodes(b)
-	}
-
-	// Encode the extended header into a buffer.
-	exBuf := bytes.NewBuffer([]byte{})
-	codec.EncodeExtendedHeader(t, exBuf)
-	t.Size = len(b) + exBuf.Len()
-
-	var n int64
-
-	// Encode and write the tag header.
-	nn, err := codec.EncodeHeader(t, w)
-	n += int64(nn)
-	if err != nil {
-		return 0, err
-	}
-
-	// Write the extended header.
-	nn, err = w.Write(exBuf.Bytes())
-	n += int64(nn)
-	if err != nil {
-		return n, err
-	}
-
-	// Write the frames to the output stream.
-	nn, err = w.Write(b)
-	n += int64(nn)
-
-	return n, err
+	_, err = c.Encode(t, ww)
+	return int64(ww.n), err
 }

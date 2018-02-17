@@ -3,7 +3,6 @@ package id3
 import (
 	"fmt"
 	"hash/crc32"
-	"io"
 	"reflect"
 )
 
@@ -244,7 +243,7 @@ func (c *codec24) Decode(t *Tag, r *reader) (int, error) {
 	// encountered.
 	for r.Len() > 0 {
 		var f Frame
-		_, err = c.decodeFrame(t, &f, r)
+		err = c.decodeFrame(t, &f, r)
 
 		if err == errPaddingEncountered {
 			t.Padding = r.Len() + 4
@@ -262,30 +261,30 @@ func (c *codec24) Decode(t *Tag, r *reader) (int, error) {
 	return r.n, nil
 }
 
-func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) (int, error) {
+func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) error {
 	// Read the first four bytes of the frame header data to see if it's
 	// padding.
 	id := r.ConsumeBytes(4)
 	if r.err != nil {
-		return r.n, r.err
+		return r.err
 	}
 	if id[0] == 0 && id[1] == 0 && id[2] == 0 && id[3] == 0 {
-		return r.n, errPaddingEncountered
+		return errPaddingEncountered
 	}
 
 	// Read the remaining 6 bytes of the header data into a buffer.
 	hd := r.ConsumeBytes(6)
 	if r.err != nil {
-		return r.n, r.err
+		return r.err
 	}
 
 	// Decode the frame's payload size.
 	size, err := decodeSyncSafeUint32(hd[0:4])
 	if err != nil {
-		return r.n, err
+		return err
 	}
 	if size < 1 {
-		return r.n, ErrInvalidFrameHeader
+		return ErrInvalidFrameHeader
 	}
 
 	// Decode the frame flags.
@@ -312,16 +311,16 @@ func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) (int, error) {
 
 		// If the frame is compressed, it must include a data length indicator.
 		if (h.Flags&FrameFlagCompressed) != 0 && (h.Flags&FrameFlagHasDataLength) == 0 {
-			return r.n, ErrInvalidFrameFlags
+			return ErrInvalidFrameFlags
 		}
 
 		if (h.Flags & FrameFlagHasGroupID) != 0 {
 			gid := r.ConsumeByte()
 			if r.err != nil {
-				return r.n, r.err
+				return r.err
 			}
 			if gid < 0x80 || gid > 0xf0 {
-				return r.n, ErrInvalidGroupID
+				return ErrInvalidGroupID
 			}
 			h.GroupID = gid
 		}
@@ -329,10 +328,10 @@ func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) (int, error) {
 		if (h.Flags & FrameFlagEncrypted) != 0 {
 			em := r.ConsumeByte()
 			if r.err != nil {
-				return r.n, r.err
+				return r.err
 			}
 			if em < 0x80 || em > 0xf0 {
-				return r.n, ErrInvalidEncryptMethod
+				return ErrInvalidEncryptMethod
 			}
 			h.EncryptMethod = em
 		}
@@ -340,11 +339,11 @@ func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) (int, error) {
 		if (h.Flags & FrameFlagHasDataLength) != 0 {
 			b := r.ConsumeBytes(4)
 			if r.err != nil {
-				return r.n, ErrInvalidFrameHeader
+				return ErrInvalidFrameHeader
 			}
 			h.DataLength, err = decodeSyncSafeUint32(b)
 			if err != nil {
-				return r.n, err
+				return err
 			}
 		}
 	}
@@ -364,7 +363,7 @@ func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) (int, error) {
 	c.scanStruct(r, p, &state)
 
 	if r.err != nil {
-		return r.n, r.err
+		return r.err
 	}
 
 	// Use reflection to access the decoded frame payload.
@@ -375,7 +374,163 @@ func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) (int, error) {
 	ht := reflect.ValueOf(*f).Elem()
 	ht.Field(0).Set(reflect.ValueOf(h))
 
-	return r.n, nil
+	return nil
+}
+
+func (c *codec24) Encode(t *Tag, w *writer) (int, error) {
+	if (t.Flags & (TagFlagHasCRC | TagFlagHasRestrictions | TagFlagIsUpdate)) != 0 {
+		t.Flags |= TagFlagExtended
+	}
+
+	// Encode the header, leaving a placeholder for the size.
+	flags := uint8(c.headerFlags.Encode(uint32(t.Flags)))
+	hdr := []byte{'I', 'D', '3', 4, 0, flags, 0, 0, 0, 0}
+	w.StoreBytes(hdr)
+	sizeOffset := 6
+
+	// Store the extended tag header.
+	crcOffset := -1
+	if (t.Flags & TagFlagExtended) != 0 {
+		exFlags := uint8(c.headerExFlags.Encode(uint32(t.Flags)))
+
+		// Store the first 6 bytes of the extended tag header, with a
+		// placeholder for the extended header's size.
+		exHdrOffset := w.Len()
+		w.StoreBytes([]byte{0, 0, 0, 0, 1, exFlags})
+
+		if (t.Flags & TagFlagIsUpdate) != 0 {
+			w.StoreByte(0)
+		}
+
+		if (t.Flags & TagFlagHasCRC) != 0 {
+			crcOffset = w.Len() + 1
+			w.StoreBytes([]byte{5, 0, 0, 0, 0, 0})
+		}
+
+		if (t.Flags & TagFlagHasRestrictions) != 0 {
+			w.StoreBytes([]byte{1, t.Restrictions})
+		}
+
+		// Update the extended header size.
+		exSize := w.Len() - exHdrOffset
+		encodeSyncSafeUint32(w.SliceBuffer(exHdrOffset, 4), uint32(exSize))
+	}
+
+	// Encode the frames.
+	framesOffset := w.Len()
+	for _, f := range t.Frames {
+		if err := c.encodeFrame(t, f, w); err != nil {
+			return w.n, err
+		}
+	}
+
+	// Add padding.
+	if t.Padding > 0 {
+		w.StoreBytes(make([]byte, t.Padding))
+	}
+
+	// Calculate a CRC covering only the frames and padding, and store it into
+	// the extended header.
+	if crcOffset > -1 {
+		framesBuf := w.SliceBuffer(framesOffset, w.Len()-framesOffset)
+		t.CRC = uint32(crc32.ChecksumIEEE(framesBuf))
+		crcBuf := w.SliceBuffer(crcOffset, 5)
+		encodeSyncSafeUint32(crcBuf, t.CRC)
+	}
+
+	// Unsynchronize.
+	if (t.Flags & TagFlagUnsync) != 0 {
+		b := addUnsyncCodes(w.ConsumeBytes(10))
+		w.StoreBytes(b)
+	}
+
+	// Update the tag header's size.
+	t.Size = w.Len() - 10
+	sizeBuf := w.SliceBuffer(sizeOffset, 4)
+	encodeSyncSafeUint32(sizeBuf, uint32(t.Size))
+
+	return w.Save()
+}
+
+func (c *codec24) encodeFrame(t *Tag, f Frame, w *writer) error {
+	// Store a placeholder for the frame ID.
+	idOffset := w.Len()
+	w.StoreBytes([]byte{0, 0, 0, 0})
+
+	// Store a placeholder for the frame size.
+	sizeOffset := w.Len()
+	w.StoreBytes([]byte{0, 0, 0, 0})
+
+	// Retrieve the frame's header.
+	h := HeaderOf(f)
+	if (h.Flags & FrameFlagCompressed) != 0 {
+		h.Flags |= FrameFlagHasDataLength
+	}
+
+	// Encode the frame header flags.
+	flags := c.frameFlags.Encode(uint32(h.Flags))
+	w.StoreByte(byte(flags >> 8))
+	w.StoreByte(byte(flags))
+
+	// Encode additional header data indicated by header flags.
+	startOffset := w.Len()
+	dataLengthOffset := -1
+	if h.Flags != 0 {
+		if (h.Flags & FrameFlagHasGroupID) != 0 {
+			if h.GroupID < 0x80 || h.GroupID > 0xf0 {
+				w.err = ErrInvalidGroupID
+			}
+			w.StoreByte(h.GroupID)
+		}
+
+		if (h.Flags & FrameFlagEncrypted) != 0 {
+			if h.EncryptMethod < 0x80 || h.EncryptMethod > 0xf0 {
+				w.err = ErrInvalidEncryptMethod
+			}
+			w.StoreByte(h.EncryptMethod)
+		}
+
+		if (h.Flags & FrameFlagHasDataLength) != 0 {
+			dataLengthOffset = w.Len()
+			w.StoreBytes([]byte{0, 0, 0, 0})
+		}
+	}
+
+	// Encode the frame payload.
+	payloadOffset := w.Len()
+	p := property{
+		typ:   reflect.TypeOf(f).Elem(),
+		value: reflect.ValueOf(f).Elem(),
+		name:  "",
+	}
+	state := state{}
+	c.outputStruct(w, p, &state)
+	if w.err != nil {
+		return w.err
+	}
+
+	// Update data length.
+	if dataLengthOffset > -1 {
+		dl := w.Len() - payloadOffset
+		encodeSyncSafeUint32(w.SliceBuffer(dataLengthOffset, 4), uint32(dl))
+	}
+
+	// Perform frame-only unsync on everything in the buffer except
+	// for the 10-byte frame header.
+	if (h.Flags&FrameFlagUnsynchronized) != 0 && (t.Flags&TagFlagUnsync) == 0 {
+		b := removeUnsyncCodes(w.ConsumeBytes(startOffset))
+		w.StoreBytes(b)
+	}
+
+	// Update the frame ID.
+	h.FrameID = c.frameTypes.LookupFrameID(state.frameType)
+	copy(w.SliceBuffer(idOffset, 4), []byte(h.FrameID))
+
+	// Update the frame size.
+	h.Size = w.Len() - startOffset
+	encodeSyncSafeUint32(w.SliceBuffer(sizeOffset, 4), uint32(h.Size))
+
+	return w.err
 }
 
 func (c *codec24) scanStruct(rr *reader, p property, state *state) {
@@ -658,130 +813,6 @@ func (c *codec24) scanString(rr *reader, p property, state *state) {
 	}
 
 	p.value.SetString(str)
-}
-
-func (c *codec24) Encode(t *Tag, w *writer) (int, error) {
-	return 0, errUnimplemented
-}
-
-func (c *codec24) EncodeExtendedHeader(t *Tag, w io.Writer) (int, error) {
-	ww := newWriter(w)
-
-	// Placeholder for size and flags
-	ww.StoreBytes([]byte{0, 0, 0, 0, 1, 0})
-
-	var flags uint8
-	if (t.Flags & TagFlagIsUpdate) != 0 {
-		ww.StoreByte(0)
-		flags |= (1 << 6)
-	}
-
-	if (t.Flags & TagFlagHasCRC) != 0 {
-		ww.StoreByte(5)
-		b := make([]byte, 5)
-		encodeSyncSafeUint32(b, t.CRC)
-		ww.StoreBytes(b)
-		flags |= (1 << 5)
-	}
-
-	if (t.Flags & TagFlagHasRestrictions) != 0 {
-		ww.StoreByte(1)
-		ww.StoreByte(t.Restrictions)
-		flags |= (1 << 4)
-	}
-
-	if flags != 0 {
-		b := ww.Bytes()
-		encodeSyncSafeUint32(b[0:4], uint32(ww.Len()))
-		b[5] = flags
-
-		return w.Write(b)
-	}
-	return 0, nil
-}
-
-func (c *codec24) EncodeHeader(t *Tag, w io.Writer) (int, error) {
-	flags := uint8(c.headerFlags.Encode(uint32(t.Flags)))
-	hdr := []byte{'I', 'D', '3', byte(t.Version), 0, flags, 0, 0, 0, 0}
-	err := encodeSyncSafeUint32(hdr[6:10], uint32(t.Size))
-	if err != nil {
-		return 0, err
-	}
-
-	return w.Write(hdr)
-}
-
-func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
-	ww := newWriter(w)
-
-	p := property{
-		typ:   reflect.TypeOf(f).Elem(),
-		value: reflect.ValueOf(f).Elem(),
-		name:  "",
-	}
-	state := state{}
-
-	c.outputStruct(ww, p, &state)
-	if ww.err != nil {
-		return ww.n, ww.err
-	}
-
-	h := HeaderOf(f)
-	h.FrameID = c.frameTypes.LookupFrameID(state.frameType)
-	h.Size = ww.Len()
-
-	// TODO: Perform frame-only unsync
-
-	exBuf := newWriter(w)
-	if h.Flags != 0 {
-		c.outputExtraHeaderData(exBuf, h)
-		h.Size += exBuf.Len()
-	}
-
-	hdr := make([]byte, 10)
-	encodeSyncSafeUint32(hdr[4:8], uint32(h.Size))
-	copy(hdr[0:4], []byte(h.FrameID))
-	flags := c.frameFlags.Encode(uint32(h.Flags))
-	hdr[8] = byte(flags >> 8)
-	hdr[9] = byte(flags)
-
-	n, err := w.Write(hdr)
-	if err != nil {
-		return n, err
-	}
-
-	exBuf.Save()
-	n += exBuf.n
-
-	ww.Save()
-	n += ww.n
-	return n, ww.err
-}
-
-func (c *codec24) outputExtraHeaderData(ww *writer, h *FrameHeader) {
-	if (h.Flags & FrameFlagCompressed) != 0 {
-		h.Flags |= FrameFlagHasDataLength
-	}
-
-	if (h.Flags & FrameFlagHasGroupID) != 0 {
-		if h.GroupID < 0x80 || h.GroupID > 0xf0 {
-			ww.err = ErrInvalidGroupID
-		}
-		ww.StoreByte(h.GroupID)
-	}
-
-	if (h.Flags & FrameFlagEncrypted) != 0 {
-		if h.EncryptMethod < 0x80 || h.EncryptMethod > 0xf0 {
-			ww.err = ErrInvalidEncryptMethod
-		}
-		ww.StoreByte(h.EncryptMethod)
-	}
-
-	if (h.Flags & FrameFlagHasDataLength) != 0 {
-		b := make([]byte, 4)
-		ww.err = encodeSyncSafeUint32(b, uint32(h.Size))
-		ww.StoreBytes(b)
-	}
 }
 
 func (c *codec24) outputStruct(ww *writer, p property, state *state) {
