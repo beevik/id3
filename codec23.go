@@ -11,6 +11,10 @@ func newCodec23() *codec23 {
 	return &codec23{}
 }
 
+func (c *codec23) Decode(t *Tag, r *reader) (int, error) {
+	return 0, errUnimplemented
+}
+
 func (c *codec23) DecodeHeader(t *Tag, r io.Reader) (int, error) {
 	return 0, errUnimplemented
 }

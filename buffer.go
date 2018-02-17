@@ -22,6 +22,11 @@ func newReader(r io.Reader) *reader {
 	return &reader{r: r, buf: make([]byte, 0, 64)}
 }
 
+// Bytes returns the contents of the reader's buffer without consuming them.
+func (r *reader) Bytes() []byte {
+	return r.buf
+}
+
 // Len returns the length of unread portion of the reader's buffer.
 func (r *reader) Len() int {
 	return len(r.buf)
@@ -55,7 +60,6 @@ func (r *reader) ConsumeByte() byte {
 
 	b := r.buf[0]
 	r.buf = r.buf[1:]
-	r.n++
 	return b
 }
 
@@ -132,6 +136,22 @@ func (r *reader) ConsumeAll() []byte {
 	p := r.buf
 	r.buf = r.buf[:0]
 	return p
+}
+
+// Consume exactly n bytes from the reader's buffer and place them into
+// a new reader.
+func (r *reader) ConsumeIntoNewReader(n int) *reader {
+	if r.err != nil {
+		return &reader{r: r.r, buf: nil}
+	}
+	if len(r.buf) < n {
+		r.err = io.ErrUnexpectedEOF
+		return &reader{r: r.r, buf: nil}
+	}
+
+	b := r.buf[:n]
+	r.buf = r.buf[n:]
+	return &reader{r: r.r, buf: b}
 }
 
 //

@@ -48,107 +48,32 @@ func newCodec(v Version) (codec, error) {
 // ReadFrom reads from a stream into an ID3 tag. It returns the number of
 // bytes read and any error encountered during decoding.
 func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
-	var n int64
+	rr := newReader(r)
 
-	// Attempt to read the 10-byte ID3 header.
-	hdr := make([]byte, 10)
-	nn, err := io.ReadFull(r, hdr)
-	n += int64(nn)
-	if err != nil {
-		return n, ErrInvalidTag
+	// Read 3 bytes to check for the ID3 file id.
+	if rr.Load(3); rr.err != nil {
+		return int64(rr.n), rr.err
 	}
 
 	// Make sure the tag id is "ID3".
-	if hdr[0] != 'I' || hdr[1] != 'D' || hdr[2] != '3' {
-		return n, ErrInvalidTag
+	fileID := rr.ConsumeAll()
+	if fileID[0] != 'I' || fileID[1] != 'D' || fileID[2] != '3' {
+		return int64(rr.n), ErrInvalidTag
 	}
 
 	// Process the version number (2.2, 2.3, or 2.4).
-	t.Version = Version(hdr[3])
-	codec, err := newCodec(t.Version)
+	if rr.Load(1); rr.err != nil {
+		return int64(rr.n), rr.err
+	}
+	t.Version = Version(rr.ConsumeByte())
+	c, err := newCodec(t.Version)
 	if err != nil {
-		return n, err
+		return int64(rr.n), err
 	}
 
-	// Decode the rest of the tag's header.
-	_, err = codec.DecodeHeader(t, bytes.NewBuffer(hdr))
-	if err != nil {
-		return n, err
-	}
-
-	// Read the rest of the tag into a buffer.
-	buf := make([]byte, t.Size)
-	nn, err = io.ReadFull(r, buf)
-	n += int64(nn)
-	if err != nil {
-		return n, ErrInvalidTag
-	}
-
-	// If the "unsync" flag is set, remove all unsync codes from the buffer.
-	if (t.Flags & TagFlagUnsync) != 0 {
-		buf = removeUnsyncCodes(buf)
-	}
-
-	// Create a new reader for the remaining tag data.
-	rb := bytes.NewBuffer(buf)
-
-	// Decode the extended header if it exists.
-	if (t.Flags & TagFlagExtended) != 0 {
-		_, err = codec.DecodeExtendedHeader(t, rb)
-		if err != nil {
-			return n, err
-		}
-	}
-
-	// Check the CRC.
-	if (t.Flags & TagFlagHasCRC) != 0 {
-		crc := crc32.ChecksumIEEE(rb.Bytes())
-		if crc != t.CRC {
-			return n, ErrFailedCRC
-		}
-	}
-
-	// Decode the tag's frames until the tag is exhausted.
-	for rb.Len() > 0 {
-		var f Frame
-
-		_, err = codec.DecodeFrame(t, &f, rb)
-
-		if err == errPaddingEncountered {
-			t.Padding = rb.Len() + 4
-			pad := make([]byte, rb.Len())
-			_, err = io.ReadFull(rb, pad)
-			if err != nil {
-				return n, err
-			}
-			break
-		}
-
-		if err != nil {
-			return n, err
-		}
-
-		t.Frames = append(t.Frames, f)
-	}
-
-	// If there's a footer, validate it.
-	if (t.Flags & TagFlagFooter) != 0 {
-		footer := make([]byte, 10)
-		nn, err = io.ReadFull(r, footer)
-		n += int64(nn)
-		if err != nil {
-			return n, err
-		}
-
-		if footer[0] != '3' || footer[1] != 'D' || footer[2] != 'I' {
-			return n, ErrInvalidFooter
-		}
-		if bytes.Compare(footer[3:], hdr[3:]) != 0 {
-			return n, ErrInvalidFooter
-		}
-	}
-
-	return n, nil
+	// Decode the rest of the tag.
+	_, err = c.Decode(t, rr)
+	return int64(rr.n), err
 }
 
 // WriteTo writes an ID3 tag to an output stream. It returns the number of

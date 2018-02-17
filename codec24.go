@@ -2,6 +2,7 @@ package id3
 
 import (
 	"fmt"
+	"hash/crc32"
 	"io"
 	"reflect"
 )
@@ -11,10 +12,11 @@ import (
 //
 
 type codec24 struct {
-	headerFlags flagMap
-	frameFlags  flagMap
-	bounds      boundsMap
-	frameTypes  *frameTypeMap
+	headerFlags   flagMap
+	headerExFlags flagMap
+	frameFlags    flagMap
+	bounds        boundsMap
+	frameTypes    *frameTypeMap
 }
 
 func newCodec24() *codec24 {
@@ -24,6 +26,11 @@ func newCodec24() *codec24 {
 			{1 << 6, uint32(TagFlagExtended)},
 			{1 << 5, uint32(TagFlagExperimental)},
 			{1 << 4, uint32(TagFlagFooter)},
+		},
+		headerExFlags: flagMap{
+			{1 << 6, uint32(TagFlagIsUpdate)},
+			{1 << 5, uint32(TagFlagHasCRC)},
+			{1 << 4, uint32(TagFlagHasRestrictions)},
 		},
 		frameFlags: flagMap{
 			{1 << 14, uint32(FrameFlagDiscardOnTagAlteration)},
@@ -138,202 +145,238 @@ type state struct {
 	fieldIndex  int        // current frame field index
 }
 
-func (c *codec24) DecodeHeader(t *Tag, r io.Reader) (int, error) {
-	hdr := make([]byte, 10)
-	n, err := io.ReadFull(r, hdr)
-	if err != nil {
-		return n, err
+// Decode decodes an ID3 v2.4 tag, starting from the fifth byte of the
+// tag.  The result is placed into the Tag t.
+func (c *codec24) Decode(t *Tag, r *reader) (int, error) {
+	// Read the remaining six bytes of the tag header.
+	if r.Load(6); r.err != nil {
+		return r.n, r.err
+	}
+	hdr := r.ConsumeBytes(6)
+	if hdr[0] != 0 {
+		return r.n, ErrInvalidTag
 	}
 
-	// Allow the codec to interpret the flags field.
-	flags := uint32(hdr[5])
+	// Process tag header flags.
+	flags := uint32(hdr[1])
 	t.Flags = TagFlags(c.headerFlags.Decode(flags))
 
-	// Process the tag size.
-	size, err := decodeSyncSafeUint32(hdr[6:10])
-	t.Size = int(size)
-	return n, err
-}
-
-func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
-	// Read the first 6 bytes of the extended header so we can see how big
-	// the additional extended data is.
-	rr := newReader(r)
-	if rr.Load(6); rr.err != nil {
-		return rr.n, rr.err
-	}
-
-	// Read the size of the extended data.
-	size, err := decodeSyncSafeUint32(rr.ConsumeBytes(4))
+	// Process tag size.
+	size, err := decodeSyncSafeUint32(hdr[2:6])
 	if err != nil {
-		return rr.n, err
+		return r.n, err
+	}
+	t.Size = int(size)
+
+	// Load the rest of the tag into the reader's buffer.
+	if r.Load(t.Size); r.err != nil {
+		return r.n, r.err
 	}
 
-	// The number of extended flag bytes must be 1.
-	if rr.ConsumeByte() != 1 {
-		return rr.n, ErrInvalidHeader
+	// Remove unsync codes.
+	if (t.Flags & TagFlagUnsync) != 0 {
+		newBuf := removeUnsyncCodes(r.ConsumeAll())
+		r.ReplaceBuffer(newBuf)
 	}
 
-	// Read the extended flags field.
-	exFlags := rr.ConsumeByte()
-	if rr.err != nil {
-		return rr.n, rr.err
-	}
-
-	// Read the rest of the extended header into the buffer.
-	if rr.Load(int(size) - 6); rr.err != nil {
-		return rr.n, rr.err
-	}
-
-	if (exFlags & (1 << 6)) != 0 {
-		t.Flags |= TagFlagIsUpdate
-		if rr.ConsumeByte() != 0 || rr.err != nil {
-			return rr.n, ErrInvalidHeader
-		}
-	}
-
-	if (exFlags & (1 << 5)) != 0 {
-		t.Flags |= TagFlagHasCRC
-		data := rr.ConsumeBytes(6)
-		if rr.err != nil || data[0] != 5 {
-			return rr.n, ErrInvalidHeader
-		}
-		t.CRC, err = decodeSyncSafeUint32(data[1:])
+	// Decode the extended header.
+	if (t.Flags & TagFlagExtended) != 0 {
+		exSize, err := decodeSyncSafeUint32(r.ConsumeBytes(4))
 		if err != nil {
-			return rr.n, ErrInvalidHeader
+			return r.n, err
+		}
+
+		if exFlagsSize := r.ConsumeByte(); exFlagsSize != 1 {
+			return r.n, ErrInvalidHeader
+		}
+
+		// Decode the extended header flags.
+		exFlags := r.ConsumeByte()
+		t.Flags = TagFlags(uint32(t.Flags) | c.headerExFlags.Decode(uint32(exFlags)))
+
+		// Consume the rest of the extended header data.
+		exBytesConsumed := 6
+
+		if (t.Flags & TagFlagIsUpdate) != 0 {
+			r.ConsumeByte()
+			exBytesConsumed++
+		}
+
+		if (t.Flags & TagFlagHasCRC) != 0 {
+			data := r.ConsumeBytes(6)
+			if data[0] != 5 {
+				return r.n, ErrInvalidHeader
+			}
+			t.CRC, err = decodeSyncSafeUint32(data[1:6])
+			if err != nil {
+				return r.n, ErrInvalidHeader
+			}
+			exBytesConsumed += 6
+		}
+
+		if (t.Flags & TagFlagHasRestrictions) != 0 {
+			if r.ConsumeByte() != 1 {
+				return r.n, ErrInvalidHeader
+			}
+			t.Restrictions = r.ConsumeByte()
+			exBytesConsumed += 2
+		}
+
+		// Consume and ignore any remaining bytes in the extended header.
+		if exBytesConsumed < int(exSize) {
+			r.ConsumeBytes(int(exSize) - exBytesConsumed)
+		}
+
+		if r.err != nil {
+			return r.n, r.err
 		}
 	}
 
-	if (exFlags & (1 << 4)) != 0 {
-		t.Flags |= TagFlagHasRestrictions
-		data := rr.ConsumeBytes(2)
-		if rr.err != nil || data[0] != 1 {
-			return rr.n, ErrInvalidHeader
+	// Validate the CRC.
+	if (t.Flags & TagFlagHasCRC) != 0 {
+		crc := crc32.ChecksumIEEE(r.Bytes())
+		if crc != t.CRC {
+			return r.n, ErrFailedCRC
 		}
-		t.Restrictions = data[1]
 	}
 
-	return rr.n, rr.err
+	// Decode the tag's frames until tag data is exhausted or padding is
+	// encountered.
+	for r.Len() > 0 {
+		var f Frame
+		_, err = c.decodeFrame(t, &f, r)
+
+		if err == errPaddingEncountered {
+			t.Padding = r.Len() + 4
+			r.ConsumeAll()
+			break
+		}
+
+		if err != nil {
+			return r.n, err
+		}
+
+		t.Frames = append(t.Frames, f)
+	}
+
+	return r.n, nil
 }
 
-func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
+func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) (int, error) {
 	// Read the first four bytes of the frame header data to see if it's
 	// padding.
-	rr := newReader(r)
-	if rr.Load(4); rr.err != nil {
-		return rr.n, rr.err
+	id := r.ConsumeBytes(4)
+	if r.err != nil {
+		return r.n, r.err
 	}
-	hd := rr.ConsumeBytes(4)
-	if hd[0] == 0 && hd[1] == 0 && hd[2] == 0 && hd[3] == 0 {
-		return rr.n, errPaddingEncountered
+	if id[0] == 0 && id[1] == 0 && id[2] == 0 && id[3] == 0 {
+		return r.n, errPaddingEncountered
 	}
 
-	// Read the remaining 6 bytes of the header data.
-	if rr.Load(6); rr.err != nil {
-		return rr.n, rr.err
+	// Read the remaining 6 bytes of the header data into a buffer.
+	hd := r.ConsumeBytes(6)
+	if r.err != nil {
+		return r.n, r.err
 	}
-	hd = append(hd, rr.ConsumeAll()...)
 
 	// Decode the frame's payload size.
-	size, err := decodeSyncSafeUint32(hd[4:8])
+	size, err := decodeSyncSafeUint32(hd[0:4])
 	if err != nil {
-		return rr.n, err
+		return r.n, err
 	}
 	if size < 1 {
-		return rr.n, ErrInvalidFrameHeader
+		return r.n, ErrInvalidFrameHeader
 	}
 
 	// Decode the frame flags.
-	flags := c.frameFlags.Decode(uint32(hd[8])<<8 | uint32(hd[9]))
+	flags := c.frameFlags.Decode(uint32(hd[4])<<8 | uint32(hd[5]))
 
 	// Create the frame header structure.
-	header := FrameHeader{
-		FrameID: string(hd[0:4]),
+	h := FrameHeader{
+		FrameID: string(id),
 		Size:    int(size),
 		Flags:   FrameFlags(flags),
 	}
 
-	// Read the rest of the frame into the input buffer.
-	if rr.Load(header.Size); rr.err != nil {
-		return rr.n, rr.err
-	}
+	// Read the rest of the frame into a new reader.
+	r = r.ConsumeIntoNewReader(h.Size)
 
 	// Strip unsync codes if the frame is unsynchronized but the tag isn't.
-	if (header.Flags&FrameFlagUnsynchronized) != 0 && (t.Flags&TagFlagUnsync) == 0 {
-		in := rr.ConsumeAll()
-		out := removeUnsyncCodes(in)
-		rr.ReplaceBuffer(out)
+	if (h.Flags&FrameFlagUnsynchronized) != 0 && (t.Flags&TagFlagUnsync) == 0 {
+		b := removeUnsyncCodes(r.ConsumeAll())
+		r.ReplaceBuffer(b)
 	}
 
-	// Scan extra header data indicated by the flags.
-	if header.Flags != 0 {
-		c.scanExtraHeaderData(rr, &header)
-		if rr.err != nil {
-			return rr.n, rr.err
+	// Scan extra header data.
+	if h.Flags != 0 {
+
+		// If the frame is compressed, it must include a data length indicator.
+		if (h.Flags&FrameFlagCompressed) != 0 && (h.Flags&FrameFlagHasDataLength) == 0 {
+			return r.n, ErrInvalidFrameFlags
+		}
+
+		if (h.Flags & FrameFlagHasGroupID) != 0 {
+			gid := r.ConsumeByte()
+			if r.err != nil {
+				return r.n, r.err
+			}
+			if gid < 0x80 || gid > 0xf0 {
+				return r.n, ErrInvalidGroupID
+			}
+			h.GroupID = gid
+		}
+
+		if (h.Flags & FrameFlagEncrypted) != 0 {
+			em := r.ConsumeByte()
+			if r.err != nil {
+				return r.n, r.err
+			}
+			if em < 0x80 || em > 0xf0 {
+				return r.n, ErrInvalidEncryptMethod
+			}
+			h.EncryptMethod = em
+		}
+
+		if (h.Flags & FrameFlagHasDataLength) != 0 {
+			b := r.ConsumeBytes(4)
+			if r.err != nil {
+				return r.n, ErrInvalidFrameHeader
+			}
+			h.DataLength, err = decodeSyncSafeUint32(b)
+			if err != nil {
+				return r.n, err
+			}
 		}
 	}
 
 	// Initialize the frame payload scan state.
 	state := state{
-		frameID: header.FrameID,
+		frameID: h.FrameID,
 	}
 
 	// Use reflection to interpret the payload's contents.
-	typ := c.frameTypes.LookupReflectType(header.FrameID)
+	typ := c.frameTypes.LookupReflectType(h.FrameID)
 	p := property{
 		typ:   typ,
 		value: reflect.New(typ),
 		name:  "",
 	}
-	c.scanStruct(rr, p, &state)
+	c.scanStruct(r, p, &state)
 
-	// Return the interpreted frame and header.
-	if rr.err == nil {
-		*f = p.value.Interface().(Frame)
-
-		// The frame's first field is always the header. Copy into it.
-		ht := reflect.ValueOf(*f).Elem()
-		ht.Field(0).Set(reflect.ValueOf(header))
+	if r.err != nil {
+		return r.n, r.err
 	}
 
-	return rr.n, rr.err
+	// Use reflection to access the decoded frame payload.
+	*f = p.value.Interface().(Frame)
+
+	// The frame's first field is always the header. Use reflection to copy to
+	// it.
+	ht := reflect.ValueOf(*f).Elem()
+	ht.Field(0).Set(reflect.ValueOf(h))
+
+	return r.n, nil
 }
-
-func (c *codec24) scanExtraHeaderData(rr *reader, h *FrameHeader) {
-	// If the frame is compressed, it must include a data length indicator.
-	if (h.Flags&FrameFlagCompressed) != 0 && (h.Flags&FrameFlagHasDataLength) == 0 {
-		rr.err = ErrInvalidFrameFlags
-		return
-	}
-
-	if (h.Flags & FrameFlagHasGroupID) != 0 {
-		gid := rr.ConsumeByte()
-		if rr.err != nil || gid < 0x80 || gid > 0xf0 {
-			rr.err = ErrInvalidGroupID
-			return
-		}
-		h.GroupID = gid
-	}
-
-	if (h.Flags & FrameFlagEncrypted) != 0 {
-		em := rr.ConsumeByte()
-		if rr.err != nil || em < 0x80 || em > 0xf0 {
-			rr.err = ErrInvalidEncryptMethod
-			return
-		}
-		h.EncryptMethod = em
-	}
-
-	if (h.Flags & FrameFlagHasDataLength) != 0 {
-		b := rr.ConsumeBytes(4)
-		if rr.err != nil {
-			rr.err = ErrInvalidFrameHeader
-		}
-		h.DataLength, rr.err = decodeSyncSafeUint32(b)
-	}
-}
-
-var counter = 0
 
 func (c *codec24) scanStruct(rr *reader, p property, state *state) {
 	if p.typ.Name() == "FrameHeader" {
