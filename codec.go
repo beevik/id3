@@ -11,6 +11,6 @@ const (
 )
 
 type codec interface {
-	Decode(t *Tag, r *reader) (int, error)
-	Encode(t *Tag, w *writer) (int, error)
+	Decode(t *Tag, r *reader) error
+	Encode(t *Tag, w *writer) error
 }

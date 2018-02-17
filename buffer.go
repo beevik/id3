@@ -36,9 +36,14 @@ func (r *reader) Len() int {
 func (r *reader) Load(n int) (int, error) {
 	l := len(r.buf)
 	r.buf = append(r.buf, make([]byte, n)...)
+
 	var nn int
 	nn, r.err = io.ReadFull(r.r, r.buf[l:])
 	r.n += nn
+
+	if nn < n {
+		r.err = io.ErrUnexpectedEOF
+	}
 	return nn, r.err
 }
 
@@ -188,9 +193,9 @@ func (w *writer) SliceBuffer(offset int, length int) []byte {
 	return w.buf[offset : offset+length]
 }
 
-// ConsumeBytes consumes all bytes in the writer's output buffer starting
-// from the offset. It returns the consumed bytes.
-func (w *writer) ConsumeBytes(offset int) []byte {
+// ConsumeBytesFromOffset consumes all bytes in the writer's output buffer
+// starting from the offset. It returns the consumed bytes.
+func (w *writer) ConsumeBytesFromOffset(offset int) []byte {
 	b := w.buf[offset:]
 	w.buf = w.buf[:offset]
 	return b

@@ -12,7 +12,14 @@ func TestHeader(t *testing.T) {
 		tag   Tag
 		err   string
 	}{
-		{[]byte{}, Tag{}, "EOF"},
+		{[]byte{}, Tag{}, "unexpected EOF"},
+		{[]byte{0x49, 0x44, 0x33}, Tag{}, "unexpected EOF"},
+		{[]byte{0x49, 0x44, 0x33, 0x04}, Tag{}, "unexpected EOF"},
+		{[]byte{0x49, 0x44, 0x33, 0x04, 0x00}, Tag{}, "unexpected EOF"},
+		{[]byte{0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, Tag{}, "invalid tag header"},
+		{[]byte{0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00}, Tag{}, "unexpected EOF"},
+		{[]byte{0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0c}, Tag{}, "unexpected EOF"},
+		{[]byte{0x49, 0x44, 0x33, 0x04, 0x10, 0x40, 0x00, 0x00, 0x00, 0x0c}, Tag{}, "invalid id3 tag"},
 		{[]byte{0x48, 0x44, 0x33, 0x04, 0x00, 0x00, 0x7f, 0x7f, 0x7f, 0x7f}, Tag{}, "invalid id3 tag"},
 		{[]byte{0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x39}, Tag{}, "unexpected EOF"},
 		{[]byte{0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80}, Tag{}, "invalid sync code"},
@@ -23,28 +30,23 @@ func TestHeader(t *testing.T) {
 		r := bytes.NewReader(c.bytes)
 		_, err := tag.ReadFrom(r)
 
-		if err == nil && c.err != "" {
+		switch {
+		case err == nil && c.err != "":
 			t.Errorf("header case %v:\n  expected error '%v', got success\n", i, c.err)
-		}
-		if err != nil && err.Error() != c.err {
+		case err != nil && err.Error() != c.err:
 			t.Errorf("header case %v:\n  got error '%v', expected error '%v'\n", i, err, c.err)
-		}
-		if err != nil && c.err == "" {
+		case err != nil && c.err == "":
 			t.Errorf("header case %v\n  got error '%v', expected success\n", i, err)
-		}
-		if err != nil && err.Error() == c.err {
+		case err != nil && err.Error() == c.err:
 			continue
-		}
 
-		if tag.Version != c.tag.Version {
+		case tag.Version != c.tag.Version:
 			t.Errorf("header case %v:\n  invalid header version: got %x, expected: %x\n",
 				i, tag.Version, c.tag.Version)
-		}
-		if tag.Flags != c.tag.Flags {
+		case tag.Flags != c.tag.Flags:
 			t.Errorf("header case %v:\n  invalid header flags: got %v expected %v\n",
 				i, tag.Flags, c.tag.Flags)
-		}
-		if tag.Size != c.tag.Size {
+		case tag.Size != c.tag.Size:
 			t.Errorf("header case %v:\n  invalid header size: got %v, expected %v\n",
 				i, tag.Size, c.tag.Size)
 		}

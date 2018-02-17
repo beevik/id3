@@ -146,16 +146,16 @@ type state struct {
 }
 
 // Decode decodes an ID3 v2.4 tag.
-func (c *codec24) Decode(t *Tag, r *reader) (int, error) {
+func (c *codec24) Decode(t *Tag, r *reader) error {
 	// Load the remaining six bytes of the tag header.
 	if r.Load(6); r.err != nil {
-		return r.n, r.err
+		return r.err
 	}
 
 	// Decode the header.
 	hdr := r.ConsumeBytes(10)
 	if hdr[4] != 0 {
-		return r.n, ErrInvalidTag
+		return ErrInvalidTag
 	}
 
 	// Process tag header flags.
@@ -165,13 +165,16 @@ func (c *codec24) Decode(t *Tag, r *reader) (int, error) {
 	// Process tag size.
 	size, err := decodeSyncSafeUint32(hdr[6:10])
 	if err != nil {
-		return r.n, err
+		return err
 	}
 	t.Size = int(size)
+	if t.Size == 0 {
+		return ErrInvalidHeader
+	}
 
 	// Load the rest of the tag into the reader's buffer.
 	if r.Load(t.Size); r.err != nil {
-		return r.n, r.err
+		return r.err
 	}
 
 	// Remove unsync codes.
@@ -184,11 +187,11 @@ func (c *codec24) Decode(t *Tag, r *reader) (int, error) {
 	if (t.Flags & TagFlagExtended) != 0 {
 		exSize, err := decodeSyncSafeUint32(r.ConsumeBytes(4))
 		if err != nil {
-			return r.n, err
+			return err
 		}
 
 		if exFlagsSize := r.ConsumeByte(); exFlagsSize != 1 {
-			return r.n, ErrInvalidHeader
+			return ErrInvalidHeader
 		}
 
 		// Decode the extended header flags.
@@ -206,18 +209,18 @@ func (c *codec24) Decode(t *Tag, r *reader) (int, error) {
 		if (t.Flags & TagFlagHasCRC) != 0 {
 			data := r.ConsumeBytes(6)
 			if data[0] != 5 {
-				return r.n, ErrInvalidHeader
+				return ErrInvalidHeader
 			}
 			t.CRC, err = decodeSyncSafeUint32(data[1:6])
 			if err != nil {
-				return r.n, ErrInvalidHeader
+				return ErrInvalidHeader
 			}
 			exBytesConsumed += 6
 		}
 
 		if (t.Flags & TagFlagHasRestrictions) != 0 {
 			if r.ConsumeByte() != 1 {
-				return r.n, ErrInvalidHeader
+				return ErrInvalidHeader
 			}
 			t.Restrictions = r.ConsumeByte()
 			exBytesConsumed += 2
@@ -229,7 +232,7 @@ func (c *codec24) Decode(t *Tag, r *reader) (int, error) {
 		}
 
 		if r.err != nil {
-			return r.n, r.err
+			return r.err
 		}
 	}
 
@@ -237,7 +240,7 @@ func (c *codec24) Decode(t *Tag, r *reader) (int, error) {
 	if (t.Flags & TagFlagHasCRC) != 0 {
 		crc := crc32.ChecksumIEEE(r.Bytes())
 		if crc != t.CRC {
-			return r.n, ErrFailedCRC
+			return ErrFailedCRC
 		}
 	}
 
@@ -254,13 +257,13 @@ func (c *codec24) Decode(t *Tag, r *reader) (int, error) {
 		}
 
 		if err != nil {
-			return r.n, err
+			return err
 		}
 
 		t.Frames = append(t.Frames, f)
 	}
 
-	return r.n, nil
+	return nil
 }
 
 func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) error {
@@ -292,14 +295,14 @@ func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) error {
 	// Decode the frame flags.
 	flags := c.frameFlags.Decode(uint32(hd[4])<<8 | uint32(hd[5]))
 
-	// Create the frame header structure.
+	// Start bulding the frame header.
 	h := FrameHeader{
 		FrameID: string(id),
 		Size:    int(size),
 		Flags:   FrameFlags(flags),
 	}
 
-	// Read the rest of the frame into a new reader.
+	// Consume the rest of the frame into a new reader.
 	r = r.ConsumeIntoNewReader(h.Size)
 
 	// Strip unsync codes if the frame is unsynchronized but the tag isn't.
@@ -308,7 +311,7 @@ func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) error {
 		r.ReplaceBuffer(b)
 	}
 
-	// Scan extra header data.
+	// Decode extra header data.
 	if h.Flags != 0 {
 
 		// If the frame is compressed, it must include a data length indicator.
@@ -355,7 +358,7 @@ func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) error {
 		frameID: h.FrameID,
 	}
 
-	// Use reflection to interpret the payload's contents.
+	// Use reflection to decode the payload's contents.
 	typ := c.frameTypes.LookupReflectType(h.FrameID)
 	p := property{
 		typ:   typ,
@@ -363,23 +366,21 @@ func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) error {
 		name:  "",
 	}
 	c.scanStruct(r, p, &state)
-
 	if r.err != nil {
 		return r.err
 	}
 
-	// Use reflection to access the decoded frame payload.
+	// Return the decoded frame payload.
 	*f = p.value.Interface().(Frame)
 
-	// The frame's first field is always the header. Use reflection to copy to
-	// it.
+	// The frame's first field is always the header. Copy the header into it.
 	ht := reflect.ValueOf(*f).Elem()
 	ht.Field(0).Set(reflect.ValueOf(h))
 
 	return nil
 }
 
-func (c *codec24) Encode(t *Tag, w *writer) (int, error) {
+func (c *codec24) Encode(t *Tag, w *writer) error {
 	if (t.Flags & (TagFlagHasCRC | TagFlagHasRestrictions | TagFlagIsUpdate)) != 0 {
 		t.Flags |= TagFlagExtended
 	}
@@ -422,12 +423,15 @@ func (c *codec24) Encode(t *Tag, w *writer) (int, error) {
 	framesOffset := w.Len()
 	for _, f := range t.Frames {
 		if err := c.encodeFrame(t, f, w); err != nil {
-			return w.n, err
+			return err
 		}
 	}
 
 	// Add padding.
 	if t.Padding > 0 {
+		if t.Padding < 4 {
+			t.Padding = 4 // must be at least 4 bytes.
+		}
 		w.StoreBytes(make([]byte, t.Padding))
 	}
 
@@ -442,16 +446,18 @@ func (c *codec24) Encode(t *Tag, w *writer) (int, error) {
 
 	// Unsynchronize.
 	if (t.Flags & TagFlagUnsync) != 0 {
-		b := addUnsyncCodes(w.ConsumeBytes(10))
+		b := addUnsyncCodes(w.ConsumeBytesFromOffset(10))
 		w.StoreBytes(b)
 	}
 
 	// Update the tag header's size.
-	t.Size = w.Len() - 10
+	t.Size = w.Len() - len(hdr)
 	sizeBuf := w.SliceBuffer(sizeOffset, 4)
 	encodeSyncSafeUint32(sizeBuf, uint32(t.Size))
 
-	return w.Save()
+	// Save writer's buffer to the output stream.
+	_, err := w.Save()
+	return err
 }
 
 func (c *codec24) encodeFrame(t *Tag, f Frame, w *writer) error {
@@ -465,11 +471,11 @@ func (c *codec24) encodeFrame(t *Tag, f Frame, w *writer) error {
 
 	// Retrieve the frame's header.
 	h := HeaderOf(f)
+
+	// Encode the frame header flags.
 	if (h.Flags & FrameFlagCompressed) != 0 {
 		h.Flags |= FrameFlagHasDataLength
 	}
-
-	// Encode the frame header flags.
 	flags := c.frameFlags.Encode(uint32(h.Flags))
 	w.StoreByte(byte(flags >> 8))
 	w.StoreByte(byte(flags))
@@ -520,7 +526,7 @@ func (c *codec24) encodeFrame(t *Tag, f Frame, w *writer) error {
 	// Perform frame-only unsync on everything in the buffer except
 	// for the 10-byte frame header.
 	if (h.Flags&FrameFlagUnsynchronized) != 0 && (t.Flags&TagFlagUnsync) == 0 {
-		b := removeUnsyncCodes(w.ConsumeBytes(startOffset))
+		b := removeUnsyncCodes(w.ConsumeBytesFromOffset(startOffset))
 		w.StoreBytes(b)
 	}
 
@@ -817,7 +823,7 @@ func (c *codec24) scanString(rr *reader, p property, state *state) {
 	p.value.SetString(str)
 }
 
-func (c *codec24) outputStruct(ww *writer, p property, state *state) {
+func (c *codec24) outputStruct(w *writer, p property, state *state) {
 	if p.typ.Name() == "FrameHeader" {
 		return
 	}
@@ -842,36 +848,36 @@ func (c *codec24) outputStruct(ww *writer, p property, state *state) {
 
 		switch field.Type.Kind() {
 		case reflect.Uint8:
-			c.outputUint8(ww, fp, state)
+			c.outputUint8(w, fp, state)
 
 		case reflect.Uint16:
-			c.outputUint16(ww, fp, state)
+			c.outputUint16(w, fp, state)
 
 		case reflect.Uint32:
-			c.outputUint32(ww, fp, state)
+			c.outputUint32(w, fp, state)
 
 		case reflect.Uint64:
-			c.outputUint64(ww, fp, state)
+			c.outputUint64(w, fp, state)
 
 		case reflect.Slice:
 			switch field.Type.Elem().Kind() {
 			case reflect.Uint8:
-				c.outputByteSlice(ww, fp, state)
+				c.outputByteSlice(w, fp, state)
 			case reflect.Uint32:
-				c.outputUint32Slice(ww, fp, state)
+				c.outputUint32Slice(w, fp, state)
 			case reflect.String:
-				c.outputStringSlice(ww, fp, state)
+				c.outputStringSlice(w, fp, state)
 			case reflect.Struct:
-				c.outputStructSlice(ww, fp, state)
+				c.outputStructSlice(w, fp, state)
 			default:
 				panic(errUnknownFieldType)
 			}
 
 		case reflect.String:
-			c.outputString(ww, fp, state)
+			c.outputString(w, fp, state)
 
 		case reflect.Struct:
-			c.outputStruct(ww, fp, state)
+			c.outputStruct(w, fp, state)
 
 		default:
 			panic(errUnknownFieldType)
@@ -881,8 +887,8 @@ func (c *codec24) outputStruct(ww *writer, p property, state *state) {
 	state.structStack.pop()
 }
 
-func (c *codec24) outputUint8(ww *writer, p property, state *state) {
-	if ww.err != nil {
+func (c *codec24) outputUint8(w *writer, p property, state *state) {
+	if w.err != nil {
 		return
 	}
 
@@ -896,18 +902,18 @@ func (c *codec24) outputUint8(ww *writer, p property, state *state) {
 	bounds, hasBounds := c.bounds[p.name]
 
 	if hasBounds && (value < uint8(bounds.min) || value > uint8(bounds.max)) {
-		ww.err = bounds.err
+		w.err = bounds.err
 		return
 	}
 
-	ww.StoreByte(value)
-	if ww.err != nil {
+	w.StoreByte(value)
+	if w.err != nil {
 		return
 	}
 }
 
-func (c *codec24) outputUint16(ww *writer, p property, state *state) {
-	if ww.err != nil {
+func (c *codec24) outputUint16(w *writer, p property, state *state) {
+	if w.err != nil {
 		return
 	}
 
@@ -916,34 +922,34 @@ func (c *codec24) outputUint16(ww *writer, p property, state *state) {
 	switch p.name {
 	case "BPM":
 		if v > 2*0xff {
-			ww.err = ErrInvalidBPM
+			w.err = ErrInvalidBPM
 			return
 		}
 		if v < 0xff {
-			ww.StoreByte(uint8(v))
+			w.StoreByte(uint8(v))
 		} else {
-			ww.StoreByte(0xff)
-			ww.StoreByte(uint8(v - 0xff))
+			w.StoreByte(0xff)
+			w.StoreByte(uint8(v - 0xff))
 		}
 	default:
 		b := []byte{byte(v >> 8), byte(v)}
-		ww.StoreBytes(b)
+		w.StoreBytes(b)
 	}
 }
 
-func (c *codec24) outputUint32(ww *writer, p property, state *state) {
-	if ww.err != nil {
+func (c *codec24) outputUint32(w *writer, p property, state *state) {
+	if w.err != nil {
 		return
 	}
 
 	v := uint32(p.value.Uint())
 	b := []byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)}
 
-	ww.StoreBytes(b)
+	w.StoreBytes(b)
 }
 
-func (c *codec24) outputUint64(ww *writer, p property, state *state) {
-	if ww.err != nil {
+func (c *codec24) outputUint64(w *writer, p property, state *state) {
+	if w.err != nil {
 		return
 	}
 
@@ -960,15 +966,15 @@ func (c *codec24) outputUint64(ww *writer, p property, state *state) {
 			b = append(b, 0)
 		}
 		for i := len(b) - 1; i >= 0; i-- {
-			ww.StoreByte(b[i])
+			w.StoreByte(b[i])
 		}
 	default:
 		panic(errUnknownFieldType)
 	}
 }
 
-func (c *codec24) outputUint32Slice(ww *writer, p property, state *state) {
-	if ww.err != nil {
+func (c *codec24) outputUint32Slice(w *writer, p property, state *state) {
+	if w.err != nil {
 		return
 	}
 
@@ -991,7 +997,7 @@ func (c *codec24) outputUint32Slice(ww *writer, p property, state *state) {
 			if frac >= (1 << 8) {
 				frac = (1 << 8) - 1
 			}
-			ww.StoreByte(byte(frac))
+			w.StoreByte(byte(frac))
 		}
 
 	case 16:
@@ -1002,26 +1008,26 @@ func (c *codec24) outputUint32Slice(ww *writer, p property, state *state) {
 				frac = (1 << 16) - 1
 			}
 			b := []byte{byte(frac >> 8), byte(frac)}
-			ww.StoreBytes(b)
+			w.StoreBytes(b)
 		}
 
 	default:
-		ww.err = ErrInvalidBits
+		w.err = ErrInvalidBits
 	}
 }
 
-func (c *codec24) outputByteSlice(ww *writer, p property, state *state) {
-	if ww.err != nil {
+func (c *codec24) outputByteSlice(w *writer, p property, state *state) {
+	if w.err != nil {
 		return
 	}
 
 	var b []byte
 	reflect.ValueOf(&b).Elem().Set(p.value)
-	ww.StoreBytes(b)
+	w.StoreBytes(b)
 }
 
-func (c *codec24) outputStringSlice(ww *writer, p property, state *state) {
-	if ww.err != nil {
+func (c *codec24) outputStringSlice(w *writer, p property, state *state) {
+	if w.err != nil {
 		return
 	}
 
@@ -1030,11 +1036,11 @@ func (c *codec24) outputStringSlice(ww *writer, p property, state *state) {
 
 	var ss []string
 	reflect.ValueOf(&ss).Elem().Set(p.value)
-	ww.StoreStrings(ss, enc)
+	w.StoreStrings(ss, enc)
 }
 
-func (c *codec24) outputStructSlice(ww *writer, p property, state *state) {
-	if ww.err != nil {
+func (c *codec24) outputStructSlice(w *writer, p property, state *state) {
+	if w.err != nil {
 		return
 	}
 
@@ -1050,15 +1056,15 @@ func (c *codec24) outputStructSlice(ww *writer, p property, state *state) {
 			name:  fmt.Sprintf("%s[%d]", p.name, i),
 		}
 
-		c.outputStruct(ww, ep, state)
-		if ww.err != nil {
+		c.outputStruct(w, ep, state)
+		if w.err != nil {
 			return
 		}
 	}
 }
 
-func (c *codec24) outputString(ww *writer, p property, state *state) {
-	if ww.err != nil {
+func (c *codec24) outputString(w *writer, p property, state *state) {
+	if w.err != nil {
 		return
 	}
 
@@ -1069,7 +1075,7 @@ func (c *codec24) outputString(ww *writer, p property, state *state) {
 		state.frameID = v
 		return
 	case "Language":
-		ww.StoreFixedLengthString(v, 3, EncodingISO88591)
+		w.StoreFixedLengthString(v, 3, EncodingISO88591)
 		return
 	}
 
@@ -1085,5 +1091,5 @@ func (c *codec24) outputString(ww *writer, p property, state *state) {
 	// Always terminate strings unless they are the last struct field
 	// of the root level struct.
 	term := state.structStack.depth() > 1 || (state.fieldIndex != state.fieldCount-1)
-	ww.StoreString(v, enc, term)
+	w.StoreString(v, enc, term)
 }

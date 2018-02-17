@@ -61,14 +61,12 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	if rr.Load(3); rr.err != nil {
 		return int64(rr.n), rr.err
 	}
-
-	// Make sure the tag id is "ID3".
 	fileID := rr.Bytes()
 	if fileID[0] != 'I' || fileID[1] != 'D' || fileID[2] != '3' {
 		return int64(rr.n), ErrInvalidTag
 	}
 
-	// Process the version number (2.2, 2.3, or 2.4).
+	// Read another byte to check the version number (2.2, 2.3, or 2.4).
 	if rr.Load(1); rr.err != nil {
 		return int64(rr.n), rr.err
 	}
@@ -79,7 +77,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	}
 
 	// Decode the rest of the tag.
-	_, err = c.Decode(t, rr)
+	err = c.Decode(t, rr)
 	return int64(rr.n), err
 }
 
@@ -94,6 +92,6 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 		return 0, err
 	}
 
-	_, err = c.Encode(t, ww)
+	err = c.Encode(t, ww)
 	return int64(ww.n), err
 }
