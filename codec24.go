@@ -168,9 +168,6 @@ func (c *codec24) Decode(t *Tag, r *reader) error {
 		return err
 	}
 	t.Size = int(size)
-	if t.Size == 0 {
-		return ErrInvalidHeader
-	}
 
 	// Load the rest of the tag into the reader's buffer.
 	if r.Load(t.Size); r.err != nil {
