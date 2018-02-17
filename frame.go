@@ -167,19 +167,20 @@ const (
 	FrameTypeURLCustom // WXXX
 
 	// Other frames
-	FrameTypeAttachedPicture     // APIC
-	FrameTypeAudioEncryption     // AENC
-	FrameTypeAudioSeekPointIndex // ASPI
-	FrameTypeComment             // COMM
-	FrameTypeGroupID             // GRID
-	FrameTypeLyricsSync          // SYLT
-	FrameTypeLyricsUnsync        // USLT
-	FrameTypePlayCount           // PCNT
-	FrameTypePopularimeter       // POPM
-	FrameTypePrivate             // PRIV
-	FrameTypeSyncTempoCodes      // SYTC
-	FrameTypeTermsOfUse          // USER
-	FrameTypeUniqueFileID        // UFID
+	FrameTypeAttachedPicture              // APIC
+	FrameTypeAudioEncryption              // AENC
+	FrameTypeAudioSeekPointIndex          // ASPI
+	FrameTypeComment                      // COMM
+	FrameTypeEncryptionMethodRegistration // ENCR
+	FrameTypeGroupID                      // GRID
+	FrameTypeLyricsSync                   // SYLT
+	FrameTypeLyricsUnsync                 // USLT
+	FrameTypePlayCount                    // PCNT
+	FrameTypePopularimeter                // POPM
+	FrameTypePrivate                      // PRIV
+	FrameTypeSyncTempoCodes               // SYTC
+	FrameTypeTermsOfUse                   // USER
+	FrameTypeUniqueFileID                 // UFID
 
 	// Non-standard values
 	FrameTypeUnknown
@@ -354,6 +355,28 @@ func NewFrameComment(language, description, text string) *FrameComment {
 		Language:    language,
 		Description: description,
 		Text:        text,
+	}
+}
+
+// FrameEncryptionMethodRegistration identifies the method of encryption
+// used by one or more of the other frames in this tag. It includes data
+// used to perform the decryption.
+type FrameEncryptionMethodRegistration struct {
+	Header        FrameHeader
+	FrameType     FrameType
+	Owner         WesternString
+	EncryptMethod uint8
+	Data          []byte
+}
+
+// NewFrameEncryptionMethodRegistration creates a new FrameEncryptionMethodRegistration
+// frame.
+func NewFrameEncryptionMethodRegistration(owner string, method uint8, data []byte) *FrameEncryptionMethodRegistration {
+	return &FrameEncryptionMethodRegistration{
+		FrameType:     FrameTypeEncryptionMethodRegistration,
+		Owner:         WesternString(owner),
+		EncryptMethod: method,
+		Data:          data,
 	}
 }
 
@@ -715,6 +738,7 @@ var frameList = []struct {
 	{FrameTypeAudioEncryption, reflect.TypeOf(FrameAudioEncryption{})},
 	{FrameTypeAudioSeekPointIndex, reflect.TypeOf(FrameAudioSeekPointIndex{})},
 	{FrameTypeComment, reflect.TypeOf(FrameComment{})},
+	{FrameTypeEncryptionMethodRegistration, reflect.TypeOf(FrameEncryptionMethodRegistration{})},
 	{FrameTypeGroupID, reflect.TypeOf(FrameGroupID{})},
 	{FrameTypeLyricsSync, reflect.TypeOf(FrameLyricsSync{})},
 	{FrameTypeLyricsUnsync, reflect.TypeOf(FrameLyricsUnsync{})},

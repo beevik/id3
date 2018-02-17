@@ -461,6 +461,12 @@ func TestCOMM(t *testing.T) {
 	serialize(t, f)
 }
 
+func TestENCR(t *testing.T) {
+	data := make([]byte, 128)
+	f := NewFrameEncryptionMethodRegistration("owner", 0x90, data)
+	serialize(t, f)
+}
+
 func TestGRID(t *testing.T) {
 	data := make([]byte, 1024)
 	f := NewFrameGroupID("owner", 0x85, data)
