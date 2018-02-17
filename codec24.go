@@ -660,6 +660,10 @@ func (c *codec24) scanString(rr *reader, p property, state *state) {
 	p.value.SetString(str)
 }
 
+func (c *codec24) Encode(t *Tag, w *writer) (int, error) {
+	return 0, errUnimplemented
+}
+
 func (c *codec24) EncodeExtendedHeader(t *Tag, w io.Writer) (int, error) {
 	ww := newWriter(w)
 

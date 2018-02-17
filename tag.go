@@ -79,6 +79,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 // WriteTo writes an ID3 tag to an output stream. It returns the number of
 // bytes written and any error encountered during encoding.
 func (t *Tag) WriteTo(w io.Writer) (int64, error) {
+	// Select a codec based on the ID3 version.
 	codec, err := newCodec(t.Version)
 	if err != nil {
 		return 0, err

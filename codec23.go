@@ -15,15 +15,7 @@ func (c *codec23) Decode(t *Tag, r *reader) (int, error) {
 	return 0, errUnimplemented
 }
 
-func (c *codec23) DecodeHeader(t *Tag, r io.Reader) (int, error) {
-	return 0, errUnimplemented
-}
-
-func (c *codec23) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
-	return 0, errUnimplemented
-}
-
-func (c *codec23) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
+func (c *codec23) Encode(t *Tag, w *writer) (int, error) {
 	return 0, errUnimplemented
 }
 

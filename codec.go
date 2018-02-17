@@ -14,6 +14,8 @@ const (
 
 type codec interface {
 	Decode(t *Tag, r *reader) (int, error)
+	Encode(t *Tag, w *writer) (int, error)
+
 	EncodeHeader(t *Tag, w io.Writer) (int, error)
 	EncodeExtendedHeader(t *Tag, w io.Writer) (int, error)
 	EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error)
