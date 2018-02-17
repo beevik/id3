@@ -145,24 +145,25 @@ type state struct {
 	fieldIndex  int        // current frame field index
 }
 
-// Decode decodes an ID3 v2.4 tag, starting from the fifth byte of the
-// tag.  The result is placed into the Tag t.
+// Decode decodes an ID3 v2.4 tag.
 func (c *codec24) Decode(t *Tag, r *reader) (int, error) {
-	// Read the remaining six bytes of the tag header.
+	// Load the remaining six bytes of the tag header.
 	if r.Load(6); r.err != nil {
 		return r.n, r.err
 	}
-	hdr := r.ConsumeBytes(6)
-	if hdr[0] != 0 {
+
+	// Decode the header.
+	hdr := r.ConsumeBytes(10)
+	if hdr[4] != 0 {
 		return r.n, ErrInvalidTag
 	}
 
 	// Process tag header flags.
-	flags := uint32(hdr[1])
+	flags := uint32(hdr[5])
 	t.Flags = TagFlags(c.headerFlags.Decode(flags))
 
 	// Process tag size.
-	size, err := decodeSyncSafeUint32(hdr[2:6])
+	size, err := decodeSyncSafeUint32(hdr[6:10])
 	if err != nil {
 		return r.n, err
 	}

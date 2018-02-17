@@ -43,6 +43,15 @@ func newCodec(v Version) (codec, error) {
 	}
 }
 
+// NewTag creates a new ID3 tag object. Use this constructor when you
+// wish to manually construct a new Tag.
+func NewTag(v Version, f TagFlags) *Tag {
+	return &Tag{
+		Version: v,
+		Flags:   f,
+	}
+}
+
 // ReadFrom reads from a stream into an ID3 tag. It returns the number of
 // bytes read and any error encountered during decoding.
 func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
@@ -54,7 +63,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	}
 
 	// Make sure the tag id is "ID3".
-	fileID := rr.ConsumeAll()
+	fileID := rr.Bytes()
 	if fileID[0] != 'I' || fileID[1] != 'D' || fileID[2] != '3' {
 		return int64(rr.n), ErrInvalidTag
 	}
@@ -63,7 +72,7 @@ func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
 	if rr.Load(1); rr.err != nil {
 		return int64(rr.n), rr.err
 	}
-	t.Version = Version(rr.ConsumeByte())
+	t.Version = Version(rr.Bytes()[3])
 	c, err := newCodec(t.Version)
 	if err != nil {
 		return int64(rr.n), err
