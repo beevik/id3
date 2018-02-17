@@ -43,6 +43,7 @@ func newCodec24() *codec24 {
 		},
 		bounds: boundsMap{
 			"Encoding":         {0, 3, ErrInvalidEncoding},
+			"EncryptMethod":    {0x80, 0xf0, ErrInvalidEncryptMethod},
 			"GroupID":          {0x80, 0xf0, ErrInvalidGroupID},
 			"LyricContentType": {0, 8, ErrInvalidLyricContentType},
 			"PictureType":      {0, 20, ErrInvalidPictureType},
