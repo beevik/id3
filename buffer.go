@@ -12,13 +12,14 @@ import (
 // A reader represents a buffer that may be consumed by the caller. The
 // buffer is populated from an input stream.
 type reader struct {
+	r   io.Reader
 	buf []byte
 	n   int
 	err error
 }
 
-func newReader() *reader {
-	return &reader{buf: make([]byte, 0, 64)}
+func newReader(r io.Reader) *reader {
+	return &reader{r: r, buf: make([]byte, 0, 64)}
 }
 
 // Len returns the length of unread portion of the reader's buffer.
@@ -27,11 +28,11 @@ func (r *reader) Len() int {
 }
 
 // LoadFrom pulls exactly n bytes from a stream into the reader's buffer.
-func (r *reader) LoadFrom(rr io.Reader, n int) (int, error) {
+func (r *reader) Load(n int) (int, error) {
 	l := len(r.buf)
 	r.buf = append(r.buf, make([]byte, n)...)
 	var nn int
-	nn, r.err = io.ReadFull(rr, r.buf[l:])
+	nn, r.err = io.ReadFull(r.r, r.buf[l:])
 	r.n += nn
 	return nn, r.err
 }
@@ -140,13 +141,14 @@ func (r *reader) ConsumeAll() []byte {
 // A writer represents a buffer to which data is added. After adding
 // data to the writer, it may be stored to a stream.
 type writer struct {
+	w   io.Writer
 	buf []byte
 	n   int
 	err error
 }
 
-func newWriter() *writer {
-	return &writer{buf: make([]byte, 0, 64)}
+func newWriter(w io.Writer) *writer {
+	return &writer{w: w, buf: make([]byte, 0, 64)}
 }
 
 // Len returns the number of unsaved bytes in the writer's buffer.
@@ -161,13 +163,13 @@ func (w *writer) Bytes() []byte {
 }
 
 // SaveTo writes all unsaved bytes in the writer's buffer to the stream.
-func (w *writer) SaveTo(ww io.Writer) (int, error) {
+func (w *writer) Save() (int, error) {
 	if w.err != nil {
 		return 0, w.err
 	}
 
 	var n int
-	n, w.err = ww.Write(w.buf)
+	n, w.err = w.w.Write(w.buf)
 	w.n += n
 	return n, w.err
 }

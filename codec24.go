@@ -158,8 +158,8 @@ func (c *codec24) DecodeHeader(t *Tag, r io.Reader) (int, error) {
 func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 	// Read the first 6 bytes of the extended header so we can see how big
 	// the additional extended data is.
-	rr := newReader()
-	if rr.LoadFrom(r, 6); rr.err != nil {
+	rr := newReader(r)
+	if rr.Load(6); rr.err != nil {
 		return rr.n, rr.err
 	}
 
@@ -181,7 +181,7 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 	}
 
 	// Read the rest of the extended header into the buffer.
-	if rr.LoadFrom(r, int(size)-6); rr.err != nil {
+	if rr.Load(int(size) - 6); rr.err != nil {
 		return rr.n, rr.err
 	}
 
@@ -219,8 +219,8 @@ func (c *codec24) DecodeExtendedHeader(t *Tag, r io.Reader) (int, error) {
 func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	// Read the first four bytes of the frame header data to see if it's
 	// padding.
-	rr := newReader()
-	if rr.LoadFrom(r, 4); rr.err != nil {
+	rr := newReader(r)
+	if rr.Load(4); rr.err != nil {
 		return rr.n, rr.err
 	}
 	hd := rr.ConsumeBytes(4)
@@ -229,7 +229,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	}
 
 	// Read the remaining 6 bytes of the header data.
-	if rr.LoadFrom(r, 6); rr.err != nil {
+	if rr.Load(6); rr.err != nil {
 		return rr.n, rr.err
 	}
 	hd = append(hd, rr.ConsumeAll()...)
@@ -254,7 +254,7 @@ func (c *codec24) DecodeFrame(t *Tag, f *Frame, r io.Reader) (int, error) {
 	}
 
 	// Read the rest of the frame into the input buffer.
-	if rr.LoadFrom(r, header.Size); rr.err != nil {
+	if rr.Load(header.Size); rr.err != nil {
 		return rr.n, rr.err
 	}
 
@@ -618,7 +618,7 @@ func (c *codec24) scanString(rr *reader, p property, state *state) {
 }
 
 func (c *codec24) EncodeExtendedHeader(t *Tag, w io.Writer) (int, error) {
-	ww := newWriter()
+	ww := newWriter(w)
 
 	// Placeholder for size and flags
 	ww.StoreBytes([]byte{0, 0, 0, 0, 1, 0})
@@ -665,7 +665,7 @@ func (c *codec24) EncodeHeader(t *Tag, w io.Writer) (int, error) {
 }
 
 func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
-	ww := newWriter()
+	ww := newWriter(w)
 
 	p := property{
 		typ:   reflect.TypeOf(f).Elem(),
@@ -685,7 +685,7 @@ func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
 
 	// TODO: Perform frame-only unsync
 
-	exBuf := newWriter()
+	exBuf := newWriter(w)
 	if h.Flags != 0 {
 		c.outputExtraHeaderData(exBuf, h)
 		h.Size += exBuf.Len()
@@ -703,10 +703,10 @@ func (c *codec24) EncodeFrame(t *Tag, f Frame, w io.Writer) (int, error) {
 		return n, err
 	}
 
-	exBuf.SaveTo(w)
+	exBuf.Save()
 	n += exBuf.n
 
-	ww.SaveTo(w)
+	ww.Save()
 	n += ww.n
 	return n, ww.err
 }
