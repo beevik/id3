@@ -30,7 +30,7 @@ const (
 	TagFlagHasRestrictions
 )
 
-func newCodec(v Version) (codec, error) {
+func newCodec(v Version) (versionCodec, error) {
 	switch v {
 	case Version2_2:
 		return newCodec22(), nil

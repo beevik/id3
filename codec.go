@@ -10,7 +10,15 @@ const (
 	Version2_4                    // v2.4
 )
 
-type codec interface {
+type versionCodec interface {
 	Decode(t *Tag, r *reader) error
 	Encode(t *Tag, w *writer) error
+}
+
+type versionData struct {
+	headerFlags   flagMap
+	headerExFlags flagMap
+	frameFlags    flagMap
+	bounds        boundsMap
+	frameTypes    *frameTypeMap
 }

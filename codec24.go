@@ -1,25 +1,28 @@
 package id3
 
 import (
-	"fmt"
 	"hash/crc32"
-	"reflect"
+	"sync"
 )
 
-//
-// codec24
-//
+var (
+	v24Data     *versionData
+	v24DataInit sync.Once
+)
 
 type codec24 struct {
-	headerFlags   flagMap
-	headerExFlags flagMap
-	frameFlags    flagMap
-	bounds        boundsMap
-	frameTypes    *frameTypeMap
+	vdata *versionData
 }
 
 func newCodec24() *codec24 {
-	return &codec24{
+	// Lazy initialize version-specific data tables, and do it only once.
+	v24DataInit.Do(initVersionData)
+
+	return &codec24{vdata: v24Data}
+}
+
+func initVersionData() {
+	v24Data = &versionData{
 		headerFlags: flagMap{
 			{1 << 7, uint32(TagFlagUnsync)},
 			{1 << 6, uint32(TagFlagExtended)},
@@ -127,24 +130,6 @@ func newCodec24() *codec24 {
 	}
 }
 
-// A property holds the reflection data necessary to update a property's
-// value. Usually the property is a struct field.
-type property struct {
-	typ   reflect.Type
-	value reflect.Value
-	name  string
-}
-
-// The state structure keeps track of persistent state required while
-// decoding a single frame.
-type state struct {
-	frameID     string     // current frame ID
-	frameType   FrameType  // current frame type
-	structStack valueStack // stack of active struct values
-	fieldCount  int        // current frame's field count
-	fieldIndex  int        // current frame field index
-}
-
 // Decode decodes an ID3 v2.4 tag.
 func (c *codec24) Decode(t *Tag, r *reader) error {
 	// Load the remaining six bytes of the tag header.
@@ -160,7 +145,7 @@ func (c *codec24) Decode(t *Tag, r *reader) error {
 
 	// Process tag header flags.
 	flags := uint32(hdr[5])
-	t.Flags = TagFlags(c.headerFlags.Decode(flags))
+	t.Flags = TagFlags(c.vdata.headerFlags.Decode(flags))
 
 	// Process tag size.
 	size, err := decodeSyncSafeUint32(hdr[6:10])
@@ -193,7 +178,7 @@ func (c *codec24) Decode(t *Tag, r *reader) error {
 
 		// Decode the extended header flags.
 		exFlags := r.ConsumeByte()
-		t.Flags = TagFlags(uint32(t.Flags) | c.headerExFlags.Decode(uint32(exFlags)))
+		t.Flags = TagFlags(uint32(t.Flags) | c.vdata.headerExFlags.Decode(uint32(exFlags)))
 
 		// Consume the rest of the extended header data.
 		exBytesConsumed := 6
@@ -290,7 +275,7 @@ func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) error {
 	}
 
 	// Decode the frame flags.
-	flags := c.frameFlags.Decode(uint32(hd[4])<<8 | uint32(hd[5]))
+	flags := c.vdata.frameFlags.Decode(uint32(hd[4])<<8 | uint32(hd[5]))
 
 	// Start bulding the frame header.
 	h := FrameHeader{
@@ -350,30 +335,15 @@ func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) error {
 		}
 	}
 
-	// Initialize the frame payload scan state.
-	state := state{
-		frameID: h.FrameID,
+	// Use a reflector to scan the frame's fields.
+	rf := newReflector(Version2_4, c.vdata)
+	*f, err = rf.ScanFrame(r, h.FrameID)
+	if err != nil {
+		return err
 	}
 
-	// Use reflection to decode the payload's contents.
-	typ := c.frameTypes.LookupReflectType(h.FrameID)
-	p := property{
-		typ:   typ,
-		value: reflect.New(typ),
-		name:  "",
-	}
-	c.scanStruct(r, p, &state)
-	if r.err != nil {
-		return r.err
-	}
-
-	// Return the decoded frame payload.
-	*f = p.value.Interface().(Frame)
-
-	// The frame's first field is always the header. Copy the header into it.
-	ht := reflect.ValueOf(*f).Elem()
-	ht.Field(0).Set(reflect.ValueOf(h))
-
+	// Copy the header into the frame.
+	rf.SetFrameHeader(*f, &h)
 	return nil
 }
 
@@ -383,7 +353,7 @@ func (c *codec24) Encode(t *Tag, w *writer) error {
 	}
 
 	// Encode the header, leaving a placeholder for the size.
-	flags := uint8(c.headerFlags.Encode(uint32(t.Flags)))
+	flags := uint8(c.vdata.headerFlags.Encode(uint32(t.Flags)))
 	hdr := []byte{'I', 'D', '3', 4, 0, flags, 0, 0, 0, 0}
 	w.StoreBytes(hdr)
 	sizeOffset := 6
@@ -391,7 +361,7 @@ func (c *codec24) Encode(t *Tag, w *writer) error {
 	// Store the extended tag header.
 	crcOffset := -1
 	if (t.Flags & TagFlagExtended) != 0 {
-		exFlags := uint8(c.headerExFlags.Encode(uint32(t.Flags)))
+		exFlags := uint8(c.vdata.headerExFlags.Encode(uint32(t.Flags)))
 
 		// Store the first 6 bytes of the extended tag header, with a
 		// placeholder for the extended header's size.
@@ -473,7 +443,7 @@ func (c *codec24) encodeFrame(t *Tag, f Frame, w *writer) error {
 	if (h.Flags & FrameFlagCompressed) != 0 {
 		h.Flags |= FrameFlagHasDataLength
 	}
-	flags := c.frameFlags.Encode(uint32(h.Flags))
+	flags := c.vdata.frameFlags.Encode(uint32(h.Flags))
 	w.StoreByte(byte(flags >> 8))
 	w.StoreByte(byte(flags))
 
@@ -501,17 +471,13 @@ func (c *codec24) encodeFrame(t *Tag, f Frame, w *writer) error {
 		}
 	}
 
-	// Encode the frame payload.
 	payloadOffset := w.Len()
-	p := property{
-		typ:   reflect.TypeOf(f).Elem(),
-		value: reflect.ValueOf(f).Elem(),
-		name:  "",
-	}
-	state := state{}
-	c.outputStruct(w, p, &state)
-	if w.err != nil {
-		return w.err
+
+	// Use a reflector to output the frame's fields.
+	rf := newReflector(Version2_4, c.vdata)
+	frameID, err := rf.OutputFrame(w, f)
+	if err != nil {
+		return err
 	}
 
 	// Update data length.
@@ -527,566 +493,13 @@ func (c *codec24) encodeFrame(t *Tag, f Frame, w *writer) error {
 		w.StoreBytes(b)
 	}
 
-	// Update the frame ID.
-	h.FrameID = c.frameTypes.LookupFrameID(state.frameType)
+	// Update the header frame ID.
+	h.FrameID = frameID
 	copy(w.SliceBuffer(idOffset, 4), []byte(h.FrameID))
 
-	// Update the frame size.
+	// Update the header frame size.
 	h.Size = w.Len() - startOffset
 	encodeSyncSafeUint32(w.SliceBuffer(sizeOffset, 4), uint32(h.Size))
 
 	return w.err
-}
-
-func (c *codec24) scanStruct(rr *reader, p property, state *state) {
-	if p.typ.Name() == "FrameHeader" {
-		return
-	}
-
-	state.structStack.push(p.value.Elem())
-	if state.structStack.depth() == 1 {
-		state.fieldCount = p.typ.NumField()
-	}
-
-	for ii, n := 0, p.typ.NumField(); ii < n; ii++ {
-		if state.structStack.depth() == 1 {
-			state.fieldIndex = ii
-		}
-
-		field := p.typ.Field(ii)
-
-		fp := property{
-			typ:   field.Type,
-			value: p.value.Elem().Field(ii),
-			name:  field.Name,
-		}
-
-		switch field.Type.Kind() {
-		case reflect.Uint8:
-			c.scanUint8(rr, fp, state)
-
-		case reflect.Uint16:
-			c.scanUint16(rr, fp, state)
-
-		case reflect.Uint32:
-			c.scanUint32(rr, fp, state)
-
-		case reflect.Uint64:
-			c.scanUint64(rr, fp, state)
-
-		case reflect.Slice:
-			switch field.Type.Elem().Kind() {
-			case reflect.Uint8:
-				c.scanByteSlice(rr, fp, state)
-			case reflect.Uint32:
-				c.scanUint32Slice(rr, fp, state)
-			case reflect.String:
-				c.scanStringSlice(rr, fp, state)
-			case reflect.Struct:
-				c.scanStructSlice(rr, fp, state)
-			default:
-				panic(errUnknownFieldType)
-			}
-
-		case reflect.String:
-			c.scanString(rr, fp, state)
-
-		case reflect.Struct:
-			c.scanStruct(rr, fp, state)
-
-		default:
-			panic(errUnknownFieldType)
-		}
-	}
-
-	state.structStack.pop()
-}
-
-func (c *codec24) scanUint8(rr *reader, p property, state *state) {
-	if rr.err != nil {
-		return
-	}
-
-	if p.typ.Name() == "FrameType" {
-		state.frameType = c.frameTypes.LookupFrameType(state.frameID)
-		p.value.SetUint(uint64(state.frameType))
-		return
-	}
-
-	bounds, hasBounds := c.bounds[p.name]
-
-	value := rr.ConsumeByte()
-	if rr.err != nil {
-		return
-	}
-
-	if hasBounds && (value < uint8(bounds.min) || value > uint8(bounds.max)) {
-		rr.err = bounds.err
-		return
-	}
-
-	p.value.SetUint(uint64(value))
-}
-
-func (c *codec24) scanUint16(rr *reader, p property, state *state) {
-	if rr.err != nil {
-		return
-	}
-
-	var value uint16
-	switch p.name {
-	case "BPM":
-		value = uint16(rr.ConsumeByte())
-		if value == 0xff {
-			value += uint16(rr.ConsumeByte())
-		}
-	default:
-		b := rr.ConsumeBytes(2)
-		value = uint16(b[0])<<8 | uint16(b[1])
-	}
-
-	if rr.err != nil {
-		return
-	}
-
-	p.value.SetUint(uint64(value))
-}
-
-func (c *codec24) scanUint32(rr *reader, p property, state *state) {
-	if rr.err != nil {
-		return
-	}
-
-	b := rr.ConsumeBytes(4)
-
-	var value uint64
-	for _, bb := range b {
-		value = (value << 8) | uint64(bb)
-	}
-
-	p.value.SetUint(value)
-}
-
-func (c *codec24) scanUint64(rr *reader, p property, state *state) {
-	if rr.err != nil {
-		return
-	}
-
-	var b []byte
-	switch p.name {
-	case "Counter":
-		b = rr.ConsumeAll()
-	default:
-		panic(errUnknownFieldType)
-	}
-
-	var value uint64
-	for _, bb := range b {
-		value = (value << 8) | uint64(bb)
-	}
-
-	p.value.SetUint(value)
-}
-
-func (c *codec24) scanByteSlice(rr *reader, p property, state *state) {
-	if rr.err != nil {
-		return
-	}
-
-	b := rr.ConsumeAll()
-	p.value.Set(reflect.ValueOf(b))
-}
-
-func (c *codec24) scanUint32Slice(rr *reader, p property, state *state) {
-	if rr.err != nil {
-		return
-	}
-
-	if p.name != "IndexOffsets" {
-		panic(errUnknownFieldType)
-	}
-
-	sf := state.structStack.first()
-	length := uint32(sf.FieldByName("IndexedDataLength").Uint())
-	bits := uint32(sf.FieldByName("BitsPerIndex").Uint())
-
-	var offsets []uint32
-
-	ff := rr.ConsumeAll()
-	switch bits {
-	case 8:
-		offsets = make([]uint32, 0, len(ff))
-		for _, f := range ff {
-			frac := uint32(f)
-			offset := (frac*length + (1 << 7)) >> 8
-			if offset > length {
-				offset = length
-			}
-			offsets = append(offsets, offset)
-		}
-
-	case 16:
-		offsets = make([]uint32, 0, len(ff)/2)
-		for ii := 0; ii < len(ff); ii += 2 {
-			frac := uint32(ff[ii])<<8 | uint32(ff[ii+1])
-			offset := (frac*length + (1 << 15)) >> 16
-			if offset > length {
-				offset = length
-			}
-			offsets = append(offsets, offset)
-		}
-
-	default:
-		rr.err = ErrInvalidBits
-		return
-	}
-
-	p.value.Set(reflect.ValueOf(offsets))
-}
-
-func (c *codec24) scanStringSlice(rr *reader, p property, state *state) {
-	if rr.err != nil {
-		return
-	}
-
-	sf := state.structStack.first()
-	enc := Encoding(sf.FieldByName("Encoding").Uint())
-	ss := rr.ConsumeStrings(enc)
-	if rr.err != nil {
-		return
-	}
-	p.value.Set(reflect.ValueOf(ss))
-}
-
-func (c *codec24) scanStructSlice(rr *reader, p property, state *state) {
-	if rr.err != nil {
-		return
-	}
-
-	elems := make([]reflect.Value, 0)
-	for i := 0; rr.Len() > 0; i++ {
-		etyp := p.typ.Elem()
-		ep := property{
-			typ:   etyp,
-			value: reflect.New(etyp),
-			name:  fmt.Sprintf("%s[%d]", p.name, i),
-		}
-
-		c.scanStruct(rr, ep, state)
-		if rr.err != nil {
-			return
-		}
-
-		elems = append(elems, ep.value)
-	}
-
-	slice := reflect.MakeSlice(p.typ, len(elems), len(elems))
-	for ii := range elems {
-		slice.Index(ii).Set(elems[ii].Elem())
-	}
-	p.value.Set(slice)
-}
-
-func (c *codec24) scanString(rr *reader, p property, state *state) {
-	if rr.err != nil {
-		return
-	}
-
-	switch p.name {
-	case "FrameID":
-		p.value.SetString(string(state.frameID))
-		return
-	case "Language":
-		str := rr.ConsumeFixedLengthString(3, EncodingISO88591)
-		p.value.SetString(str)
-		return
-	}
-
-	var enc Encoding
-	switch p.typ.Name() {
-	case "WesternString":
-		enc = EncodingISO88591
-	default:
-		sf := state.structStack.first()
-		enc = Encoding(sf.FieldByName("Encoding").Uint())
-	}
-
-	str := rr.ConsumeNextString(enc)
-
-	if rr.err != nil {
-		return
-	}
-
-	p.value.SetString(str)
-}
-
-func (c *codec24) outputStruct(w *writer, p property, state *state) {
-	if p.typ.Name() == "FrameHeader" {
-		return
-	}
-
-	state.structStack.push(p.value)
-	if state.structStack.depth() == 1 {
-		state.fieldCount = p.typ.NumField()
-	}
-
-	for i, n := 0, p.typ.NumField(); i < n; i++ {
-		if state.structStack.depth() == 1 {
-			state.fieldIndex = i
-		}
-
-		field := p.typ.Field(i)
-
-		fp := property{
-			typ:   field.Type,
-			value: p.value.Field(i),
-			name:  field.Name,
-		}
-
-		switch field.Type.Kind() {
-		case reflect.Uint8:
-			c.outputUint8(w, fp, state)
-
-		case reflect.Uint16:
-			c.outputUint16(w, fp, state)
-
-		case reflect.Uint32:
-			c.outputUint32(w, fp, state)
-
-		case reflect.Uint64:
-			c.outputUint64(w, fp, state)
-
-		case reflect.Slice:
-			switch field.Type.Elem().Kind() {
-			case reflect.Uint8:
-				c.outputByteSlice(w, fp, state)
-			case reflect.Uint32:
-				c.outputUint32Slice(w, fp, state)
-			case reflect.String:
-				c.outputStringSlice(w, fp, state)
-			case reflect.Struct:
-				c.outputStructSlice(w, fp, state)
-			default:
-				panic(errUnknownFieldType)
-			}
-
-		case reflect.String:
-			c.outputString(w, fp, state)
-
-		case reflect.Struct:
-			c.outputStruct(w, fp, state)
-
-		default:
-			panic(errUnknownFieldType)
-		}
-	}
-
-	state.structStack.pop()
-}
-
-func (c *codec24) outputUint8(w *writer, p property, state *state) {
-	if w.err != nil {
-		return
-	}
-
-	value := uint8(p.value.Uint())
-
-	if p.typ.Name() == "FrameType" {
-		state.frameType = FrameType(value)
-		return
-	}
-
-	bounds, hasBounds := c.bounds[p.name]
-
-	if hasBounds && (value < uint8(bounds.min) || value > uint8(bounds.max)) {
-		w.err = bounds.err
-		return
-	}
-
-	w.StoreByte(value)
-	if w.err != nil {
-		return
-	}
-}
-
-func (c *codec24) outputUint16(w *writer, p property, state *state) {
-	if w.err != nil {
-		return
-	}
-
-	v := uint16(p.value.Uint())
-
-	switch p.name {
-	case "BPM":
-		if v > 2*0xff {
-			w.err = ErrInvalidBPM
-			return
-		}
-		if v < 0xff {
-			w.StoreByte(uint8(v))
-		} else {
-			w.StoreByte(0xff)
-			w.StoreByte(uint8(v - 0xff))
-		}
-	default:
-		b := []byte{byte(v >> 8), byte(v)}
-		w.StoreBytes(b)
-	}
-}
-
-func (c *codec24) outputUint32(w *writer, p property, state *state) {
-	if w.err != nil {
-		return
-	}
-
-	v := uint32(p.value.Uint())
-	b := []byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)}
-
-	w.StoreBytes(b)
-}
-
-func (c *codec24) outputUint64(w *writer, p property, state *state) {
-	if w.err != nil {
-		return
-	}
-
-	v := p.value.Uint()
-
-	switch p.name {
-	case "Counter":
-		b := make([]byte, 0, 4)
-		for v != 0 {
-			b = append(b, byte(v&0xff))
-			v = v >> 8
-		}
-		for len(b) < 4 {
-			b = append(b, 0)
-		}
-		for i := len(b) - 1; i >= 0; i-- {
-			w.StoreByte(b[i])
-		}
-	default:
-		panic(errUnknownFieldType)
-	}
-}
-
-func (c *codec24) outputUint32Slice(w *writer, p property, state *state) {
-	if w.err != nil {
-		return
-	}
-
-	if p.name != "IndexOffsets" {
-		panic(errUnknownFieldType)
-	}
-
-	sf := state.structStack.first()
-	length := uint32(sf.FieldByName("IndexedDataLength").Uint())
-	bits := uint32(sf.FieldByName("BitsPerIndex").Uint())
-
-	n := p.value.Len()
-	slice := p.value.Slice(0, n)
-
-	switch bits {
-	case 8:
-		for i := 0; i < n; i++ {
-			offset := uint32(slice.Index(i).Uint())
-			frac := (offset << 8) / length
-			if frac >= (1 << 8) {
-				frac = (1 << 8) - 1
-			}
-			w.StoreByte(byte(frac))
-		}
-
-	case 16:
-		for i := 0; i < n; i++ {
-			offset := uint32(slice.Index(i).Uint())
-			frac := (offset << 16) / length
-			if frac >= (1 << 16) {
-				frac = (1 << 16) - 1
-			}
-			b := []byte{byte(frac >> 8), byte(frac)}
-			w.StoreBytes(b)
-		}
-
-	default:
-		w.err = ErrInvalidBits
-	}
-}
-
-func (c *codec24) outputByteSlice(w *writer, p property, state *state) {
-	if w.err != nil {
-		return
-	}
-
-	var b []byte
-	reflect.ValueOf(&b).Elem().Set(p.value)
-	w.StoreBytes(b)
-}
-
-func (c *codec24) outputStringSlice(w *writer, p property, state *state) {
-	if w.err != nil {
-		return
-	}
-
-	sf := state.structStack.first()
-	enc := Encoding(sf.FieldByName("Encoding").Uint())
-
-	var ss []string
-	reflect.ValueOf(&ss).Elem().Set(p.value)
-	w.StoreStrings(ss, enc)
-}
-
-func (c *codec24) outputStructSlice(w *writer, p property, state *state) {
-	if w.err != nil {
-		return
-	}
-
-	n := p.value.Len()
-	slice := p.value.Slice(0, n)
-
-	for i := 0; i < n; i++ {
-		elem := slice.Index(i)
-
-		ep := property{
-			typ:   elem.Type(),
-			value: elem,
-			name:  fmt.Sprintf("%s[%d]", p.name, i),
-		}
-
-		c.outputStruct(w, ep, state)
-		if w.err != nil {
-			return
-		}
-	}
-}
-
-func (c *codec24) outputString(w *writer, p property, state *state) {
-	if w.err != nil {
-		return
-	}
-
-	v := p.value.String()
-
-	switch p.name {
-	case "FrameID":
-		state.frameID = v
-		return
-	case "Language":
-		w.StoreFixedLengthString(v, 3, EncodingISO88591)
-		return
-	}
-
-	var enc Encoding
-	switch p.typ.Name() {
-	case "WesternString":
-		enc = EncodingISO88591
-	default:
-		sf := state.structStack.first()
-		enc = Encoding(sf.FieldByName("Encoding").Uint())
-	}
-
-	// Always terminate strings unless they are the last struct field
-	// of the root level struct.
-	term := state.structStack.depth() > 1 || (state.fieldIndex != state.fieldCount-1)
-	w.StoreString(v, enc, term)
 }
