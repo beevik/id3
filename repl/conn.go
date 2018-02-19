@@ -7,14 +7,16 @@ import (
 )
 
 type conn struct {
-	input  *bufio.Scanner
-	output *bufio.Writer
+	input       *bufio.Scanner
+	output      *bufio.Writer
+	interactive bool
 }
 
 func newConn(r io.Reader, w io.Writer) *conn {
 	return &conn{
-		input:  bufio.NewScanner(r),
-		output: bufio.NewWriter(w),
+		input:       bufio.NewScanner(r),
+		output:      bufio.NewWriter(w),
+		interactive: false,
 	}
 }
 
@@ -40,6 +42,8 @@ func (c *conn) GetLine() (string, error) {
 	if c.input.Scan() {
 		return c.input.Text(), nil
 	}
-
-	return "", c.input.Err()
+	if c.input.Err() != nil {
+		return "", c.input.Err()
+	}
+	return "", io.EOF
 }

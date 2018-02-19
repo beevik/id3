@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -52,6 +53,7 @@ var commandList = []command{
 	{"print", "Display context of the previously read ID3 tag", onPrint},
 	{"close", "Close the open file", onClose},
 	{"state", "Print the current state of the application", onState},
+	{"dump", "Dump the binary contents of the current tag", onDump},
 }
 
 var commands = prefixtree.New()
@@ -63,53 +65,87 @@ func init() {
 }
 
 func main() {
-	repl()
+	args := os.Args
+	switch {
+	case len(args) == 1:
+		startRepl()
+	default:
+		exec(args[1])
+	}
 }
 
-func repl() error {
+func exec(filename string) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		fmt.Printf("Command file '%s' not found.\n", filename)
+		os.Exit(0)
+	}
+
+	c := newConn(file, os.Stdout)
+	return repl(c)
+}
+
+func startRepl() error {
 	c := newConn(os.Stdin, os.Stdout)
+	c.interactive = true
+	return repl(c)
+}
+
+func repl(c *conn) error {
 	s := &state{commands: commandList}
 
 	for {
-		c.Printf("id3> ")
-		c.Flush()
+		if c.interactive {
+			c.Printf("id3> ")
+			c.Flush()
+		}
 
 		line, err := c.GetLine()
 		if err != nil {
 			break
 		}
 
-		var cmd, args string
-		segments := strings.SplitN(line, " ", 2)
-		switch {
-		case len(segments) == 1:
-			cmd, args = segments[0], ""
-		default:
-			cmd, args = segments[0], stripLeadingWhitespace(segments[1])
+		if !c.interactive {
+			c.Printf("id3> %s\n", line)
 		}
 
-		if cmd == "" {
-			continue
-		}
-
-		cc, err := commands.Find(cmd)
-		switch {
-		case err == prefixtree.ErrPrefixNotFound:
-			c.Println("command not found.")
-			continue
-		case err == prefixtree.ErrPrefixAmbiguous:
-			c.Println("command ambiguous.")
-			continue
-		case c == nil:
+		err = execute(c, s, line)
+		if err != nil {
 			break
 		}
-
-		if err = cc.(handlerFunc)(c, s, args); err != nil {
-			break
-		}
+		c.Printf("\n")
 	}
 
 	return nil
+}
+
+func execute(c *conn, s *state, line string) error {
+	var cmd, args string
+	segments := strings.SplitN(line, " ", 2)
+	switch {
+	case len(segments) == 1:
+		cmd, args = segments[0], ""
+	default:
+		cmd, args = segments[0], stripLeadingWhitespace(segments[1])
+	}
+
+	if cmd == "" {
+		return nil
+	}
+
+	cc, err := commands.Find(cmd)
+	switch {
+	case err == prefixtree.ErrPrefixNotFound:
+		c.Println("command not found.")
+		return nil
+	case err == prefixtree.ErrPrefixAmbiguous:
+		c.Println("command ambiguous.")
+		return nil
+	case cc == nil:
+		return nil
+	}
+
+	return cc.(handlerFunc)(c, s, args)
 }
 
 func onHelp(c *conn, s *state, args string) error {
@@ -270,6 +306,23 @@ func onState(c *conn, s *state, args string) error {
 		outputFrame(c, s.activeFrame)
 	}
 
+	return nil
+}
+
+func onDump(c *conn, s *state, args string) error {
+	if s.activeTag == nil {
+		c.Println("ERROR: No active tag.")
+		return nil
+	}
+
+	buf := bytes.NewBuffer([]byte{})
+	_, err := s.activeTag.WriteTo(buf)
+	if err != nil {
+		c.Printf("ERROR: %v\n", err)
+		return nil
+	}
+
+	hexdump(c, buf.Bytes())
 	return nil
 }
 
