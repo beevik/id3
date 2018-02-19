@@ -466,6 +466,10 @@ func (c *codec24) encodeFrame(t *Tag, f Frame, w *writer) error {
 			dataLengthOffset = w.Len()
 			w.StoreBytes([]byte{0, 0, 0, 0})
 		}
+
+		if w.err != nil {
+			return w.err
+		}
 	}
 
 	payloadOffset := w.Len()

@@ -391,6 +391,10 @@ func (c *codec23) encodeFrame(t *Tag, f Frame, w *writer) error {
 			}
 			w.StoreByte(h.GroupID)
 		}
+
+		if w.err != nil {
+			return w.err
+		}
 	}
 
 	payloadOffset := w.Len()
