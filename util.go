@@ -6,6 +6,13 @@ import (
 	"reflect"
 )
 
+func decodeUint32(b []byte) uint32 {
+	if len(b) != 4 {
+		panic("invalid uint32 size")
+	}
+	return uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
+}
+
 // Decode a sync-safe uint32 from a byte slice containing 4 or 5 bytes.
 func decodeSyncSafeUint32(b []byte) (value uint32, err error) {
 	l := len(b)
@@ -21,6 +28,16 @@ func decodeSyncSafeUint32(b []byte) (value uint32, err error) {
 		tmp = (tmp << 7) | uint64(b[i])
 	}
 	return uint32(tmp), nil
+}
+
+func encodeUint32(b []byte, value uint32) {
+	if len(b) != 4 {
+		panic("invalid uint32 size")
+	}
+	b[0] = byte(value >> 24)
+	b[1] = byte(value >> 16)
+	b[2] = byte(value >> 8)
+	b[3] = byte(value)
 }
 
 // Encode a sync-safe uint32 into a byte slice containing 4 or 5 bytes.
