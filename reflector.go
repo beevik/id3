@@ -303,6 +303,11 @@ func (rf *reflector) scanStringSlice(r *reader, p property, state *state) {
 	if r.err != nil {
 		return
 	}
+
+	if rf.version < Version2_4 && len(ss) > 1 {
+		ss = ss[:1]
+	}
+
 	p.value.Set(reflect.ValueOf(ss))
 }
 
@@ -581,6 +586,11 @@ func (rf *reflector) outputStringSlice(w *writer, p property, state *state) {
 
 	var ss []string
 	reflect.ValueOf(&ss).Elem().Set(p.value)
+
+	if rf.version < Version2_4 && len(ss) > 1 {
+		ss = ss[:1]
+	}
+
 	w.StoreStrings(ss, enc)
 }
 

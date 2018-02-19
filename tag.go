@@ -52,6 +52,31 @@ func NewTag(v Version, f TagFlags) *Tag {
 	}
 }
 
+// PeekTag peeks at a buffer containing at least 10 bytes to determine if it
+// contains an ID3 tag. If it does, PeekTag returns the ID3 version number
+// and the total size of the tag in bytes. If it doesn't, PeekTag returns
+// ErrInvalidHeader.
+func PeekTag(b []byte) (version Version, size int, err error) {
+	switch {
+	case len(b) < 10:
+		return 0, 0, ErrInvalidHeader
+	case b[0] != 'I' || b[1] != 'D' || b[2] != '3':
+		return 0, 0, ErrInvalidHeader
+	case b[3] < 2 || b[3] > 4:
+		return 0, 0, ErrInvalidHeader
+	case b[4] != 0:
+		return 0, 0, ErrInvalidHeader
+	}
+
+	var sz uint32
+	sz, err = decodeSyncSafeUint32(b[6:10])
+	if err != nil {
+		return 0, 0, ErrInvalidHeader
+	}
+
+	return Version(b[3]), int(sz + 10), nil
+}
+
 // ReadFrom reads from a stream into an ID3 tag. It returns the number of
 // bytes read and any error encountered during decoding.
 func (t *Tag) ReadFrom(r io.Reader) (int64, error) {
