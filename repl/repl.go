@@ -12,7 +12,24 @@ import (
 	"github.com/beevik/prefixtree"
 )
 
-type handlerFunc func(c *conn, s *state, args string) error
+var cmds = newCommands([]command{
+	{name: "file", description: "Run a file command", commands: newCommands([]command{
+		{name: "open", description: "Open a file", handler: onFileOpen},
+		{name: "close", description: "Close the open file", handler: onFileClose},
+	})},
+	{name: "tag", description: "Run a tag command", commands: newCommands([]command{
+		{name: "read", description: "Read the next tag from the open file", handler: onTagRead},
+		{name: "print", description: "Display the active tag's contents", handler: onTagPrint},
+		{name: "dump", description: "Hex dump the active tag", handler: onTagDump},
+	})},
+	{name: "frame", description: "Find a frame with the given ID", commands: newCommands([]command{
+		{name: "activate", description: "Activate a frame with the given ID", handler: onFrameActivate},
+		{name: "deactivate", description: "Deactivate the active frame", handler: onFrameDeactivate},
+	})},
+	{name: "status", description: "Display the current status", handler: onStatus},
+	{name: "exit", description: "", handler: onQuit},
+	{name: "quit", description: "Exit the application", handler: onQuit},
+})
 
 type state struct {
 	activeFile          *os.File
@@ -21,47 +38,13 @@ type state struct {
 	activeFilename      string
 	activeTag           *id3.Tag
 	activeFrame         id3.Frame
-	commands            []command
 }
 
 func (s *state) reset() {
 	if s.activeFile != nil {
 		s.activeFile.Close()
 	}
-	s.activeFile = nil
-	s.activeFilename = ""
-	s.activeFileReader = nil
-	s.activeFileBytesRead = 0
-	s.activeTag = nil
-	s.activeFrame = nil
-}
-
-type command struct {
-	str         string
-	description string
-	handler     handlerFunc
-}
-
-var commandList = []command{
-	{"?", "", onHelp},
-	{"help", "Display commands", onHelp},
-	{"exit", "", onQuit},
-	{"quit", "Exit the application", onQuit},
-	{"open", "Open a file", onOpen},
-	{"read", "Read the next ID3 tag in the open file", onRead},
-	{"frame", "Find a frame with the given ID", onFrame},
-	{"print", "Display context of the previously read ID3 tag", onPrint},
-	{"close", "Close the open file", onClose},
-	{"state", "Print the current state of the application", onState},
-	{"dump", "Dump the binary contents of the current tag", onDump},
-}
-
-var commands = prefixtree.New()
-
-func init() {
-	for _, c := range commandList {
-		commands.Add(c.str, c.handler)
-	}
+	*s = state{}
 }
 
 func main() {
@@ -92,7 +75,7 @@ func startRepl() error {
 }
 
 func repl(c *conn) error {
-	s := &state{commands: commandList}
+	s := &state{}
 
 	for {
 		if c.interactive {
@@ -109,7 +92,25 @@ func repl(c *conn) error {
 			c.Printf("id3> %s\n", line)
 		}
 
-		err = execute(c, s, line)
+		r, err := cmds.find(line)
+		switch {
+		case err == prefixtree.ErrPrefixNotFound:
+			c.Println("command not found.")
+			continue
+		case err == prefixtree.ErrPrefixAmbiguous:
+			c.Println("command ambiguous.")
+			continue
+		case err != nil:
+			c.Printf("%v.\n", err)
+			continue
+		case r.helpText != "":
+			c.Printf("%s", r.helpText)
+			continue
+		case r.cmd == nil:
+			continue
+		}
+
+		err = r.cmd.handler(c, s, r.args)
 		if err != nil {
 			break
 		}
@@ -119,50 +120,7 @@ func repl(c *conn) error {
 	return nil
 }
 
-func execute(c *conn, s *state, line string) error {
-	var cmd, args string
-	segments := strings.SplitN(line, " ", 2)
-	switch {
-	case len(segments) == 1:
-		cmd, args = segments[0], ""
-	default:
-		cmd, args = segments[0], stripLeadingWhitespace(segments[1])
-	}
-
-	if cmd == "" {
-		return nil
-	}
-
-	cc, err := commands.Find(cmd)
-	switch {
-	case err == prefixtree.ErrPrefixNotFound:
-		c.Println("command not found.")
-		return nil
-	case err == prefixtree.ErrPrefixAmbiguous:
-		c.Println("command ambiguous.")
-		return nil
-	case cc == nil:
-		return nil
-	}
-
-	return cc.(handlerFunc)(c, s, args)
-}
-
-func onHelp(c *conn, s *state, args string) error {
-	c.Println("Commands:")
-	for _, cmd := range s.commands {
-		if cmd.description != "" {
-			c.Printf("  %-10s %s\n", cmd.str, cmd.description)
-		}
-	}
-	return nil
-}
-
-func onQuit(c *conn, s *state, args string) error {
-	return errors.New("quitting")
-}
-
-func onOpen(c *conn, s *state, args string) error {
+func onFileOpen(c *conn, s *state, args string) error {
 	segments := strings.Split(args, " ")
 
 	if len(segments) < 1 || segments[0] == "" {
@@ -186,7 +144,13 @@ func onOpen(c *conn, s *state, args string) error {
 	return nil
 }
 
-func onRead(c *conn, s *state, args string) error {
+func onFileClose(c *conn, s *state, args string) error {
+	s.reset()
+	c.Println("OK.")
+	return nil
+}
+
+func onTagRead(c *conn, s *state, args string) error {
 	if s.activeFileReader == nil {
 		c.Println("ERROR: No active file opened.")
 		return nil
@@ -222,7 +186,39 @@ func onRead(c *conn, s *state, args string) error {
 	return nil
 }
 
-func onFrame(c *conn, s *state, args string) error {
+func onTagPrint(c *conn, s *state, args string) error {
+	if s.activeTag == nil {
+		c.Println("ERROR: No active tag.")
+		return nil
+	}
+
+	outputTag(c, s.activeTag)
+
+	for _, f := range s.activeTag.Frames {
+		outputFrame(c, f)
+	}
+
+	return nil
+}
+
+func onTagDump(c *conn, s *state, args string) error {
+	if s.activeTag == nil {
+		c.Println("ERROR: No active tag.")
+		return nil
+	}
+
+	buf := bytes.NewBuffer([]byte{})
+	_, err := s.activeTag.WriteTo(buf)
+	if err != nil {
+		c.Printf("ERROR: %v\n", err)
+		return nil
+	}
+
+	hexdump(c, buf.Bytes())
+	return nil
+}
+
+func onFrameActivate(c *conn, s *state, args string) error {
 	if s.activeTag == nil {
 		c.Println("ERROR: No active tag.")
 		return nil
@@ -250,28 +246,21 @@ func onFrame(c *conn, s *state, args string) error {
 	return nil
 }
 
-func onPrint(c *conn, s *state, args string) error {
-	if s.activeTag == nil {
+func onFrameDeactivate(c *conn, s *state, args string) error {
+	if s.activeFrame == nil {
 		c.Println("ERROR: No active tag.")
 		return nil
 	}
 
-	outputTag(c, s.activeTag)
+	h := id3.HeaderOf(s.activeFrame)
+	id := h.FrameID
 
-	for _, f := range s.activeTag.Frames {
-		outputFrame(c, f)
-	}
-
+	s.activeFrame = nil
+	c.Printf("Frame '%s' deactivated.", id)
 	return nil
 }
 
-func onClose(c *conn, s *state, args string) error {
-	s.reset()
-	c.Println("OK.")
-	return nil
-}
-
-func onState(c *conn, s *state, args string) error {
+func onStatus(c *conn, s *state, args string) error {
 	if s.activeFileReader == nil {
 		c.Println("No active file.")
 	} else {
@@ -309,21 +298,8 @@ func onState(c *conn, s *state, args string) error {
 	return nil
 }
 
-func onDump(c *conn, s *state, args string) error {
-	if s.activeTag == nil {
-		c.Println("ERROR: No active tag.")
-		return nil
-	}
-
-	buf := bytes.NewBuffer([]byte{})
-	_, err := s.activeTag.WriteTo(buf)
-	if err != nil {
-		c.Printf("ERROR: %v\n", err)
-		return nil
-	}
-
-	hexdump(c, buf.Bytes())
-	return nil
+func onQuit(c *conn, s *state, args string) error {
+	return errors.New("quitting")
 }
 
 func stripLeadingWhitespace(s string) string {
