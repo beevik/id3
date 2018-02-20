@@ -15,6 +15,7 @@ import (
 var cmds = newCommands([]command{
 	{name: "file", description: "Run a file command", commands: newCommands([]command{
 		{name: "open", description: "Open a file", handler: onFileOpen},
+		{name: "read", description: "Open a file and read the first tag", handler: onFileRead},
 		{name: "close", description: "Close the open file", handler: onFileClose},
 	})},
 	{name: "tag", description: "Run a tag command", commands: newCommands([]command{
@@ -24,6 +25,7 @@ var cmds = newCommands([]command{
 	})},
 	{name: "frame", description: "Find a frame with the given ID", commands: newCommands([]command{
 		{name: "activate", description: "Activate a frame with the given ID", handler: onFrameActivate},
+		{name: "list", description: "List all frames in the active tag", handler: onFrameList},
 		{name: "deactivate", description: "Deactivate the active frame", handler: onFrameDeactivate},
 	})},
 	{name: "status", description: "Display the current status", handler: onStatus},
@@ -48,12 +50,15 @@ func (s *state) reset() {
 }
 
 func main() {
-	args := os.Args
+	args := os.Args[1:]
+
 	switch {
-	case len(args) == 1:
-		startRepl()
+	case len(args) == 0:
+		repl()
 	default:
-		exec(args[1])
+		for _, filename := range args {
+			exec(filename)
+		}
 	}
 }
 
@@ -65,16 +70,16 @@ func exec(filename string) error {
 	}
 
 	c := newConn(file, os.Stdout)
-	return repl(c)
+	return runCommands(c)
 }
 
-func startRepl() error {
+func repl() error {
 	c := newConn(os.Stdin, os.Stdout)
 	c.interactive = true
-	return repl(c)
+	return runCommands(c)
 }
 
-func repl(c *conn) error {
+func runCommands(c *conn) error {
 	s := &state{}
 
 	for {
@@ -124,7 +129,7 @@ func onFileOpen(c *conn, s *state, args string) error {
 	segments := strings.Split(args, " ")
 
 	if len(segments) < 1 || segments[0] == "" {
-		c.Println("invalid filename")
+		c.Println("ERROR: invalid filename.")
 		return nil
 	}
 
@@ -136,7 +141,7 @@ func onFileOpen(c *conn, s *state, args string) error {
 
 	s.reset()
 
-	c.Printf("File '%v' opened successfully.\n", segments[0])
+	c.Printf("File '%s' opened successfully.\n", segments[0])
 	s.activeFile = file
 	s.activeFilename = segments[0]
 	s.activeFileReader = bufio.NewReader(s.activeFile)
@@ -144,9 +149,22 @@ func onFileOpen(c *conn, s *state, args string) error {
 	return nil
 }
 
+func onFileRead(c *conn, s *state, args string) error {
+	err := onFileOpen(c, s, args)
+	if err != nil {
+		return err
+	}
+	return onTagRead(c, s, "")
+}
+
 func onFileClose(c *conn, s *state, args string) error {
+	if s.activeFile == nil {
+		c.Println("ERROR: No active file opened.")
+		return nil
+	}
+
+	c.Printf("File '%s' closed.\n", s.activeFilename)
 	s.reset()
-	c.Println("OK.")
 	return nil
 }
 
@@ -224,25 +242,44 @@ func onFrameActivate(c *conn, s *state, args string) error {
 		return nil
 	}
 
-	arg := strings.Split(args, " ")
+	arg := strings.SplitN(args, " ", 2)
+	frameID := strings.ToUpper(arg[0])
+	if frameID == "" {
+		c.Println("ERROR: command missing argument.")
+		return nil
+	}
 
 	var found id3.Frame
 	for _, f := range s.activeTag.Frames {
 		h := id3.HeaderOf(f)
-		if h.FrameID == arg[0] {
+		if h.FrameID == frameID {
 			found = f
 			break
 		}
 	}
 
 	if found == nil {
-		c.Printf("ERROR: Frame '%s' not found.\n", arg[0])
+		c.Printf("ERROR: Frame '%s' not found.\n", frameID)
 		return nil
 	}
 
 	s.activeFrame = found
-	c.Printf("Frame '%s' active.\n", arg[0])
+	c.Printf("Frame '%s' active.\n", frameID)
 	outputFrame(c, s.activeFrame)
+	return nil
+}
+
+func onFrameList(c *conn, s *state, args string) error {
+	if s.activeTag == nil {
+		c.Println("ERROR: No active tag.")
+		return nil
+	}
+
+	for _, f := range s.activeTag.Frames {
+		h := id3.HeaderOf(f)
+		c.Printf("%s: %d bytes\n", h.FrameID, h.Size)
+	}
+
 	return nil
 }
 
@@ -302,15 +339,6 @@ func onQuit(c *conn, s *state, args string) error {
 	return errors.New("quitting")
 }
 
-func stripLeadingWhitespace(s string) string {
-	for i := 0; i < len(s); i++ {
-		if s[i] != ' ' && s[i] != '\t' {
-			return s[i:]
-		}
-	}
-	return ""
-}
-
 func outputTag(c *conn, tag *id3.Tag) {
 	c.Printf("Version: 2.%d\n", tag.Version)
 	c.Printf("Size: %d bytes\n", tag.Size+10)
@@ -362,50 +390,6 @@ func outputFrame(c *conn, ff id3.Frame) {
 		c.Printf(": %s (%d) %d", f.Email, f.Rating, f.Counter)
 	}
 	c.Printf("\n")
-}
-
-func writeTag() {
-	tag := id3.Tag{Version: id3.Version2_4}
-	tag.Flags |= id3.TagFlagHasCRC
-
-	com := id3.NewFrameComment("eng", "foo", "comment")
-	com.Header.SetGroupID(0x90)
-	com.Header.SetEncryptMethod(0xf0)
-	com.Header.SetFlag(id3.FrameFlagCompressed, true)
-	com.Header.SetFlag(id3.FrameFlagHasDataLength, true)
-	tag.Frames = append(tag.Frames, com)
-
-	lyr := id3.NewFrameLyricsSync("eng", "lyrics", id3.TimeStampMilliseconds, id3.LyricContentTypeTranscription)
-	lyr.AddSync(3000, "This ")
-	lyr.AddSync(1000, "is ")
-	lyr.AddSync(2001, "a song.")
-	tag.Frames = append(tag.Frames, lyr)
-
-	playcount := id3.NewFramePlayCount(0x1234567890aabbcc)
-	tag.Frames = append(tag.Frames, playcount)
-
-	title := id3.NewFrameText(id3.FrameTypeTextSongTitle, "Yellow Submarine")
-	tag.Frames = append(tag.Frames, title)
-
-	tx := id3.NewFrameTextCustom("label", "content")
-	tag.Frames = append(tag.Frames, tx)
-
-	priv := id3.NewFramePrivate("owner", []byte{0, 1, 2, 3})
-	tag.Frames = append(tag.Frames, priv)
-
-	sp := id3.NewFrameAudioSeekPointIndex(0, 1000)
-	sp.AddIndexOffset(100)
-	sp.AddIndexOffset(2)
-	sp.AddIndexOffset(951)
-	sp.AddIndexOffset(800)
-	sp.AddIndexOffset(401)
-	tag.Frames = append(tag.Frames, sp)
-
-	buf := bytes.NewBuffer([]byte{})
-	tag.WriteTo(buf)
-
-	c := newConn(os.Stdin, os.Stdout)
-	hexdump(c, buf.Bytes())
 }
 
 func hexdump(c *conn, b []byte) {

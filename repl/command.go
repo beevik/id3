@@ -41,14 +41,16 @@ func newCommands(list []command) *commands {
 }
 
 func (c *commands) find(line string) (commandResult, error) {
-	ss := strings.SplitN(line, " ", 2)
+	ss := strings.SplitN(stripLeadingWhitespace(line), " ", 2)
 
-	var cmd, args string
-	switch len(ss) {
-	case 1:
-		cmd = ss[0]
-	case 2:
-		cmd, args = ss[0], stripLeadingWhitespace(ss[1])
+	var args string
+	cmd := ss[0]
+	if len(ss) > 1 {
+		args = stripLeadingWhitespace(ss[1])
+	}
+
+	if cmd == "" {
+		return commandResult{}, nil
 	}
 
 	if cmd == "help" || cmd == "?" {
@@ -79,4 +81,13 @@ func (c *commands) find(line string) (commandResult, error) {
 	}
 
 	return commandResult{}, errors.New("command not found")
+}
+
+func stripLeadingWhitespace(s string) string {
+	for i := 0; i < len(s); i++ {
+		if s[i] != ' ' && s[i] != '\t' {
+			return s[i:]
+		}
+	}
+	return ""
 }
