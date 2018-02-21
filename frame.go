@@ -4,7 +4,8 @@ import "reflect"
 
 // A FrameHeader holds the data described by a frame header.
 type FrameHeader struct {
-	FrameID       string     // Frame ID string
+	FrameType     FrameType  // Frame type
+	FrameID       string     // Frame ID string (once encoded or decoded)
 	Size          int        // Frame size not including 10-byte header
 	Flags         FrameFlags // Flags
 	GroupID       uint8      // Optional group identifier
@@ -209,11 +210,11 @@ type Frame interface {
 
 // HeaderOf returns a pointer to the frame's header data.
 func HeaderOf(f Frame) *FrameHeader {
-	var hdr *FrameHeader
-	ft := reflect.ValueOf(f).Elem()
-	hv := reflect.ValueOf(&hdr).Elem()
-	hv.Set(ft.Field(0).Addr())
-	return hdr
+	var h *FrameHeader
+	source := reflect.ValueOf(f).Elem().Field(0).Addr()
+	target := reflect.ValueOf(&h).Elem()
+	target.Set(source)
+	return h
 }
 
 // PictureType describes the type of picture stored within an Attached
@@ -248,7 +249,6 @@ const (
 // FrameAttachedPicture contains the payload of an image frame.
 type FrameAttachedPicture struct {
 	Header      FrameHeader
-	FrameType   FrameType
 	Encoding    Encoding
 	MimeType    WesternString
 	PictureType PictureType
@@ -259,7 +259,7 @@ type FrameAttachedPicture struct {
 // NewFrameAttachedPicture creates a new attached-picture frame.
 func NewFrameAttachedPicture(mimeType, description string, typ PictureType, data []byte) *FrameAttachedPicture {
 	return &FrameAttachedPicture{
-		FrameType:   FrameTypeAttachedPicture,
+		Header:      FrameHeader{FrameType: FrameTypeAttachedPicture},
 		Encoding:    EncodingUTF8,
 		MimeType:    WesternString(mimeType),
 		PictureType: typ,
@@ -272,7 +272,6 @@ func NewFrameAttachedPicture(mimeType, description string, typ PictureType, data
 // so, provides data used by an encryption algorithm to decode it.
 type FrameAudioEncryption struct {
 	Header        FrameHeader
-	FrameType     FrameType
 	Owner         WesternString
 	PreviewStart  uint16
 	PreviewLength uint16
@@ -282,7 +281,7 @@ type FrameAudioEncryption struct {
 // NewFrameAudioEncryption creates a new audio encryption frame.
 func NewFrameAudioEncryption(owner string, previewStart, previewLength uint16, data []byte) *FrameAudioEncryption {
 	return &FrameAudioEncryption{
-		FrameType:     FrameTypeAudioEncryption,
+		Header:        FrameHeader{FrameType: FrameTypeAudioEncryption},
 		Owner:         WesternString(owner),
 		PreviewStart:  previewStart,
 		PreviewLength: previewLength,
@@ -294,7 +293,6 @@ func NewFrameAudioEncryption(owner string, previewStart, previewLength uint16, d
 // important positions within the encoded audio data.
 type FrameAudioSeekPointIndex struct {
 	Header            FrameHeader
-	FrameType         FrameType
 	IndexedDataStart  uint32
 	IndexedDataLength uint32
 	IndexPoints       uint16
@@ -305,7 +303,7 @@ type FrameAudioSeekPointIndex struct {
 // NewFrameAudioSeekPointIndex creates a new audio seek point index frame.
 func NewFrameAudioSeekPointIndex(indexedDataStart, indexedDataLength uint32) *FrameAudioSeekPointIndex {
 	return &FrameAudioSeekPointIndex{
-		FrameType:         FrameTypeAudioSeekPointIndex,
+		Header:            FrameHeader{FrameType: FrameTypeAudioSeekPointIndex},
 		IndexedDataStart:  indexedDataStart,
 		IndexedDataLength: indexedDataLength,
 		IndexPoints:       0,
@@ -340,7 +338,6 @@ func (f *FrameAudioSeekPointIndex) AddIndexOffset(o uint32) {
 // FrameComment contains a full-text comment field.
 type FrameComment struct {
 	Header      FrameHeader
-	FrameType   FrameType
 	Encoding    Encoding
 	Language    string
 	Description string
@@ -350,7 +347,7 @@ type FrameComment struct {
 // NewFrameComment creates a new full-text comment frame.
 func NewFrameComment(language, description, text string) *FrameComment {
 	return &FrameComment{
-		FrameType:   FrameTypeComment,
+		Header:      FrameHeader{FrameType: FrameTypeComment},
 		Encoding:    EncodingUTF8,
 		Language:    language,
 		Description: description,
@@ -363,7 +360,6 @@ func NewFrameComment(language, description, text string) *FrameComment {
 // used to perform the decryption.
 type FrameEncryptionMethodRegistration struct {
 	Header        FrameHeader
-	FrameType     FrameType
 	Owner         WesternString
 	EncryptMethod uint8
 	Data          []byte
@@ -373,7 +369,7 @@ type FrameEncryptionMethodRegistration struct {
 // frame.
 func NewFrameEncryptionMethodRegistration(owner string, method uint8, data []byte) *FrameEncryptionMethodRegistration {
 	return &FrameEncryptionMethodRegistration{
-		FrameType:     FrameTypeEncryptionMethodRegistration,
+		Header:        FrameHeader{FrameType: FrameTypeEncryptionMethodRegistration},
 		Owner:         WesternString(owner),
 		EncryptMethod: method,
 		Data:          data,
@@ -385,20 +381,19 @@ func NewFrameEncryptionMethodRegistration(owner string, method uint8, data []byt
 // identifier, there will be a corresponding GRID frame with data
 // describing the group.
 type FrameGroupID struct {
-	Header    FrameHeader
-	FrameType FrameType
-	Owner     WesternString
-	GroupID   uint8
-	Data      []byte
+	Header  FrameHeader
+	Owner   WesternString
+	GroupID uint8
+	Data    []byte
 }
 
 // NewFrameGroupID creates a new group identifier frame.
 func NewFrameGroupID(owner string, groupID uint8, data []byte) *FrameGroupID {
 	return &FrameGroupID{
-		FrameType: FrameTypeGroupID,
-		Owner:     WesternString(owner),
-		GroupID:   groupID,
-		Data:      data,
+		Header:  FrameHeader{FrameType: FrameTypeGroupID},
+		Owner:   WesternString(owner),
+		GroupID: groupID,
+		Data:    data,
 	}
 }
 
@@ -439,7 +434,6 @@ type LyricsSync struct {
 // FrameLyricsSync contains synchronized lyrics or text information.
 type FrameLyricsSync struct {
 	Header           FrameHeader
-	FrameType        FrameType
 	Encoding         Encoding
 	Language         string
 	TimeStampFormat  TimeStampFormat
@@ -452,7 +446,7 @@ type FrameLyricsSync struct {
 func NewFrameLyricsSync(language, descriptor string,
 	format TimeStampFormat, typ LyricContentType) *FrameLyricsSync {
 	return &FrameLyricsSync{
-		FrameType:        FrameTypeLyricsSync,
+		Header:           FrameHeader{FrameType: FrameTypeLyricsSync},
 		Encoding:         EncodingUTF8,
 		Language:         language,
 		TimeStampFormat:  format,
@@ -485,7 +479,6 @@ func (f *FrameLyricsSync) AddSync(timestamp uint32, text string) {
 // data.
 type FrameLyricsUnsync struct {
 	Header     FrameHeader
-	FrameType  FrameType
 	Encoding   Encoding
 	Language   string
 	Descriptor string
@@ -495,7 +488,7 @@ type FrameLyricsUnsync struct {
 // NewFrameLyricsUnsync creates a new unsynchronized lyrics frame.
 func NewFrameLyricsUnsync(language, descriptor, lyrics string) *FrameLyricsUnsync {
 	return &FrameLyricsUnsync{
-		FrameType:  FrameTypeLyricsUnsync,
+		Header:     FrameHeader{FrameType: FrameTypeLyricsUnsync},
 		Encoding:   EncodingUTF8,
 		Language:   language,
 		Descriptor: descriptor,
@@ -506,52 +499,49 @@ func NewFrameLyricsUnsync(language, descriptor, lyrics string) *FrameLyricsUnsyn
 // FramePrivate contains private information specific to a software
 // producer.
 type FramePrivate struct {
-	Header    FrameHeader
-	FrameType FrameType
-	Owner     WesternString
-	Data      []byte
+	Header FrameHeader
+	Owner  WesternString
+	Data   []byte
 }
 
 // NewFramePrivate creates a new private information frame.
 func NewFramePrivate(owner string, data []byte) *FramePrivate {
 	return &FramePrivate{
-		FrameType: FrameTypePrivate,
-		Owner:     WesternString(owner),
-		Data:      data,
+		Header: FrameHeader{FrameType: FrameTypePrivate},
+		Owner:  WesternString(owner),
+		Data:   data,
 	}
 }
 
 // FramePlayCount tracks the number of times the MP3 file has been played.
 type FramePlayCount struct {
-	Header    FrameHeader
-	FrameType FrameType
-	Counter   uint64
+	Header  FrameHeader
+	Counter uint64
 }
 
 // NewFramePlayCount creates a new play count frame.
 func NewFramePlayCount(counter uint64) *FramePlayCount {
 	return &FramePlayCount{
-		FrameType: FrameTypePlayCount,
-		Counter:   counter,
+		Header:  FrameHeader{FrameType: FrameTypePlayCount},
+		Counter: counter,
 	}
 }
 
 // FramePopularimeter tracks the "popularimeter" value for an MP3 file.
 type FramePopularimeter struct {
-	Header    FrameHeader
-	FrameType FrameType
-	Email     WesternString
-	Rating    uint8
-	Counter   uint64
+	Header  FrameHeader
+	Email   WesternString
+	Rating  uint8
+	Counter uint64
 }
 
 // NewFramePopularimeter creates a new "popularimeter" frame.
 func NewFramePopularimeter(email string, rating uint8, counter uint64) *FramePopularimeter {
 	return &FramePopularimeter{
-		FrameType: FrameTypePopularimeter,
-		Email:     WesternString(email),
-		Rating:    rating,
-		Counter:   counter,
+		Header:  FrameHeader{FrameType: FrameTypePopularimeter},
+		Email:   WesternString(email),
+		Rating:  rating,
+		Counter: counter,
 	}
 }
 
@@ -564,7 +554,6 @@ type TempoSync struct {
 // FrameSyncTempoCodes contains synchronized tempo codes.
 type FrameSyncTempoCodes struct {
 	Header          FrameHeader
-	FrameType       FrameType
 	TimeStampFormat TimeStampFormat
 	Sync            []TempoSync
 }
@@ -572,7 +561,7 @@ type FrameSyncTempoCodes struct {
 // NewFrameSyncTempoCodes creates a new synchronized tempo codes frame.
 func NewFrameSyncTempoCodes(format TimeStampFormat) *FrameSyncTempoCodes {
 	return &FrameSyncTempoCodes{
-		FrameType:       FrameTypeSyncTempoCodes,
+		Header:          FrameHeader{FrameType: FrameTypeSyncTempoCodes},
 		TimeStampFormat: format,
 		Sync:            []TempoSync{},
 	}
@@ -599,20 +588,19 @@ func (f *FrameSyncTempoCodes) AddSync(bpm uint16, timestamp uint32) {
 
 // FrameTermsOfUse contains the terms of use description for the MP3.
 type FrameTermsOfUse struct {
-	Header    FrameHeader
-	FrameType FrameType
-	Encoding  Encoding
-	Language  string
-	Text      string
+	Header   FrameHeader
+	Encoding Encoding
+	Language string
+	Text     string
 }
 
 // NewFrameTermsOfUse creates a new terms-of-use frame.
 func NewFrameTermsOfUse(language, text string) *FrameTermsOfUse {
 	return &FrameTermsOfUse{
-		FrameType: FrameTypeTermsOfUse,
-		Encoding:  EncodingUTF8,
-		Language:  language,
-		Text:      text,
+		Header:   FrameHeader{FrameType: FrameTypeTermsOfUse},
+		Encoding: EncodingUTF8,
+		Language: language,
+		Text:     text,
 	}
 }
 
@@ -621,25 +609,23 @@ func NewFrameTermsOfUse(language, text string) *FrameTermsOfUse {
 // may contain one or more text strings.  In all other versions, only one
 // text string may appear.
 type FrameText struct {
-	Header    FrameHeader
-	FrameType FrameType
-	Encoding  Encoding
-	Text      []string
+	Header   FrameHeader
+	Encoding Encoding
+	Text     []string
 }
 
 // NewFrameText creates a new text frame payload with a single text string.
 func NewFrameText(typ FrameType, text string) *FrameText {
 	return &FrameText{
-		FrameType: typ,
-		Encoding:  EncodingUTF8,
-		Text:      []string{text},
+		Header:   FrameHeader{FrameType: typ},
+		Encoding: EncodingUTF8,
+		Text:     []string{text},
 	}
 }
 
 // FrameTextCustom contains a custom text payload.
 type FrameTextCustom struct {
 	Header      FrameHeader
-	FrameType   FrameType
 	Encoding    Encoding
 	Description string
 	Text        string
@@ -648,7 +634,7 @@ type FrameTextCustom struct {
 // NewFrameTextCustom creates a new custom text frame payload.
 func NewFrameTextCustom(description, text string) *FrameTextCustom {
 	return &FrameTextCustom{
-		FrameType:   FrameTypeTextCustom,
+		Header:      FrameHeader{FrameType: FrameTypeTextCustom},
 		Encoding:    EncodingUTF8,
 		Description: description,
 		Text:        text,
@@ -658,41 +644,38 @@ func NewFrameTextCustom(description, text string) *FrameTextCustom {
 // FrameUnknown contains the payload of any frame whose ID is
 // unknown to this package.
 type FrameUnknown struct {
-	Header    FrameHeader
-	FrameType FrameType
-	FrameID   string
-	Data      []byte
+	Header  FrameHeader
+	FrameID string
+	Data    []byte
 }
 
 // NewFrameUnknown creates a new frame of unknown type.
 func NewFrameUnknown(id string, data []byte) *FrameUnknown {
 	return &FrameUnknown{
-		FrameType: FrameTypeUnknown,
-		FrameID:   id,
-		Data:      data,
+		Header:  FrameHeader{FrameType: FrameTypeUnknown},
+		FrameID: id,
+		Data:    data,
 	}
 }
 
 // FrameURL may contain the payload of any type of URL frame except
 // for the user-defined WXXX URL frame.
 type FrameURL struct {
-	Header    FrameHeader
-	FrameType FrameType
-	URL       WesternString
+	Header FrameHeader
+	URL    WesternString
 }
 
 // NewFrameURL creates a URL frame of the requested type.
 func NewFrameURL(typ FrameType, url string) *FrameURL {
 	return &FrameURL{
-		FrameType: typ,
-		URL:       WesternString(url),
+		Header: FrameHeader{FrameType: typ},
+		URL:    WesternString(url),
 	}
 }
 
 // FrameURLCustom contains a custom URL payload.
 type FrameURLCustom struct {
 	Header      FrameHeader
-	FrameType   FrameType
 	Encoding    Encoding
 	Description string
 	URL         WesternString
@@ -701,7 +684,7 @@ type FrameURLCustom struct {
 // NewFrameURLCustom creates a custom URL frame.
 func NewFrameURLCustom(description, url string) *FrameURLCustom {
 	return &FrameURLCustom{
-		FrameType:   FrameTypeURLCustom,
+		Header:      FrameHeader{FrameType: FrameTypeURLCustom},
 		Encoding:    EncodingUTF8,
 		Description: description,
 		URL:         WesternString(url),
@@ -711,7 +694,6 @@ func NewFrameURLCustom(description, url string) *FrameURLCustom {
 // FrameUniqueFileID contains a unique file identifier for the MP3.
 type FrameUniqueFileID struct {
 	Header     FrameHeader
-	FrameType  FrameType
 	Owner      WesternString
 	Identifier WesternString
 }
@@ -719,7 +701,7 @@ type FrameUniqueFileID struct {
 // NewFrameUniqueFileID creates a new Unique FileID frame.
 func NewFrameUniqueFileID(owner, id string) *FrameUniqueFileID {
 	return &FrameUniqueFileID{
-		FrameType:  FrameTypeUniqueFileID,
+		Header:     FrameHeader{FrameType: FrameTypeUniqueFileID},
 		Owner:      WesternString(owner),
 		Identifier: WesternString(id),
 	}

@@ -31,7 +31,6 @@ type property struct {
 // decoding a single frame.
 type state struct {
 	frameID     string     // current frame ID
-	frameType   FrameType  // current frame type
 	structStack valueStack // stack of active struct values
 	fieldCount  int        // current frame's field count
 	fieldIndex  int        // current frame field index
@@ -69,7 +68,10 @@ func (rf *reflector) SetFrameHeader(f Frame, h *FrameHeader) {
 // OutputFrame uses reflection to output the contents of an ID3 frame to
 // a writer buffer.
 func (rf *reflector) OutputFrame(w *writer, f Frame) (frameID string, err error) {
-	state := state{}
+	frameType := HeaderOf(f).FrameType
+	frameID = rf.vdata.frameTypes.LookupFrameID(frameType)
+
+	state := state{frameID: frameID}
 
 	p := property{
 		typ:   reflect.TypeOf(f).Elem(),
@@ -82,7 +84,6 @@ func (rf *reflector) OutputFrame(w *writer, f Frame) (frameID string, err error)
 		return "", w.err
 	}
 
-	frameID = rf.vdata.frameTypes.LookupFrameID(state.frameType)
 	return frameID, nil
 }
 
@@ -152,12 +153,6 @@ func (rf *reflector) scanStruct(r *reader, p property, state *state) {
 
 func (rf *reflector) scanUint8(r *reader, p property, state *state) {
 	if r.err != nil {
-		return
-	}
-
-	if p.typ.Name() == "FrameType" {
-		state.frameType = rf.vdata.frameTypes.LookupFrameType(state.frameID)
-		p.value.SetUint(uint64(state.frameType))
 		return
 	}
 
@@ -443,11 +438,6 @@ func (rf *reflector) outputUint8(w *writer, p property, state *state) {
 	}
 
 	value := uint8(p.value.Uint())
-
-	if p.typ.Name() == "FrameType" {
-		state.frameType = FrameType(value)
-		return
-	}
 
 	bounds, hasBounds := rf.vdata.bounds[p.name]
 

@@ -339,6 +339,9 @@ func (c *codec24) decodeFrame(t *Tag, f *Frame, r *reader) error {
 		return err
 	}
 
+	// Update the frame type.
+	h.FrameType = rf.vdata.frameTypes.LookupFrameType(h.FrameID)
+
 	// Copy the header into the frame.
 	rf.SetFrameHeader(*f, &h)
 	return nil
@@ -494,8 +497,9 @@ func (c *codec24) encodeFrame(t *Tag, f Frame, w *writer) error {
 		w.StoreBytes(b)
 	}
 
-	// Update the header frame ID.
+	// Update the header frame ID and type.
 	h.FrameID = frameID
+	h.FrameType = rf.vdata.frameTypes.LookupFrameType(frameID)
 	copy(w.SliceBuffer(idOffset, 4), []byte(h.FrameID))
 
 	// Update the header frame size.

@@ -120,3 +120,26 @@ func (t *Tag) WriteTo(w io.Writer) (int64, error) {
 	err = c.Encode(t, ww)
 	return int64(ww.n), err
 }
+
+// FindFrame searches the tag's frames for the first frame of the requested
+// type and returns it. If no frame is found, it returns nil.
+func (t *Tag) FindFrame(typ FrameType) Frame {
+	for _, f := range t.Frames {
+		if HeaderOf(f).FrameType == typ {
+			return f
+		}
+	}
+	return nil
+}
+
+// FindFrames searches the Tag's frames for all frames of the requested type
+// and returns them.
+func (t *Tag) FindFrames(typ FrameType) []Frame {
+	ff := []Frame{}
+	for _, f := range t.Frames {
+		if HeaderOf(f).FrameType == typ {
+			ff = append(ff, f)
+		}
+	}
+	return ff
+}
