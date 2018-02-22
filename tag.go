@@ -143,3 +143,13 @@ func (t *Tag) FindFrames(typ FrameType) []Frame {
 	}
 	return ff
 }
+
+// RemoveFrames removes all frames of the requested type from the tag.
+func (t *Tag) RemoveFrames(typ FrameType) {
+	for i := 0; i < len(t.Frames); i++ {
+		if HeaderOf(t.Frames[i]).FrameType == typ {
+			t.Frames = append(t.Frames[:i], t.Frames[i+1:])
+			i--
+		}
+	}
+}
